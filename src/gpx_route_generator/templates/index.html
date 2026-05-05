@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>GPX Route Generator</title>
+  <link rel="stylesheet" href="{{ url_for('static', path='styles.css') }}">
+</head>
+<body>
+  <main class="app-shell">
+    <section class="workspace">
+      <form id="render-form" class="panel controls">
+        <div class="panel-header">
+          <div>
+            <p class="eyebrow">Local renderer</p>
+            <h1>GPX Route Generator</h1>
+          </div>
+          <span class="badge" id="request-estimate">240 map requests</span>
+        </div>
+
+        <label class="field file-field">
+          <span>GPX file</span>
+          <input id="gpx-file" name="gpx_file" type="file" accept=".gpx,application/gpx+xml,text/xml" required>
+        </label>
+
+        <fieldset class="field">
+          <legend>Output format</legend>
+          <div class="format-grid">
+            <label class="format-option">
+              <input type="radio" name="output_format" value="landscape" checked>
+              <span>
+                <strong>16:9 Landscape</strong>
+                <small>1280 x 720</small>
+              </span>
+            </label>
+            <label class="format-option">
+              <input type="radio" name="output_format" value="portrait">
+              <span>
+                <strong>9:16 Portrait</strong>
+                <small>720 x 1280</small>
+              </span>
+            </label>
+          </div>
+        </fieldset>
+
+        <div class="split">
+          <label class="field">
+            <span>Duration</span>
+            <input id="duration" name="duration_seconds" type="number" min="5" max="15" step="1" value="10" required>
+          </label>
+          <label class="field">
+            <span>FPS</span>
+            <input id="fps" name="fps" type="number" min="1" max="60" step="1" value="24" required>
+          </label>
+        </div>
+
+        <details class="advanced" open>
+          <summary>Advanced controls</summary>
+          <div class="advanced-grid">
+            <label class="field">
+              <span>Map type</span>
+              <select name="map_type">
+                <option value="roadmap" selected>Roadmap</option>
+                <option value="satellite">Satellite</option>
+                <option value="terrain">Terrain</option>
+                <option value="hybrid">Hybrid</option>
+              </select>
+            </label>
+            <label class="field">
+              <span>Trail color</span>
+              <input name="trail_color" type="color" value="#ff2f2f">
+            </label>
+            <label class="field">
+              <span>Trail width</span>
+              <input name="trail_width" type="number" min="1" max="24" step="1" value="6">
+            </label>
+            <label class="field">
+              <span>Arrow size</span>
+              <input name="arrow_size" type="number" min="16" max="160" step="1" value="54">
+            </label>
+            <label class="field">
+              <span>Camera smoothing</span>
+              <input id="camera-smoothing" name="camera_smoothing" type="range" min="0" max="0.95" step="0.01" value="0.72">
+            </label>
+          </div>
+
+          <div class="toggle-grid">
+            <label><input name="show_progress_bar" type="checkbox" checked> Progress bar</label>
+            <label><input name="show_time" type="checkbox" checked> Time</label>
+            <label><input name="show_distance" type="checkbox" checked> Distance</label>
+            <label><input name="show_speed" type="checkbox" checked> Speed</label>
+            <label><input name="show_elevation" type="checkbox" checked> Elevation</label>
+          </div>
+        </details>
+
+        <label class="budget-confirm" id="budget-confirm">
+          <input id="confirm-over-budget" name="confirm_over_budget" type="checkbox">
+          Confirm render above 750 Google map requests
+        </label>
+
+        <button class="primary-button" id="render-button" type="submit">Render MP4</button>
+      </form>
+
+      <section class="panel status-panel">
+        <div class="panel-header">
+          <div>
+            <p class="eyebrow">Job status</p>
+            <h2 id="status-title">Ready</h2>
+          </div>
+          <span class="badge muted" id="format-badge">1280 x 720</span>
+        </div>
+
+        <div class="video-stage" id="video-stage">
+          <div class="empty-state" id="empty-state">
+            <strong>No render yet</strong>
+            <span>Upload a GPX file, choose a format and duration, then render.</span>
+          </div>
+          <video id="preview-video" controls hidden></video>
+        </div>
+
+        <div class="progress-wrap">
+          <div class="progress-bar"><span id="progress-fill"></span></div>
+          <div class="progress-meta">
+            <span id="progress-label">0%</span>
+            <span id="request-label">0 actual requests</span>
+          </div>
+        </div>
+
+        <p class="message" id="message"></p>
+        <a class="download-link" id="download-link" href="#" hidden>Download MP4</a>
+      </section>
+    </section>
+  </main>
+  <script src="{{ url_for('static', path='app.js') }}"></script>
+</body>
+</html>
