@@ -19,6 +19,12 @@ const spinnerLabel = document.querySelector("#spinner-label");
 const dropZone = document.querySelector("#drop-zone");
 const dropFilename = document.querySelector("#drop-filename");
 const gpxFileInput = document.querySelector("#gpx-file");
+const trailColorInput = document.querySelector("[name='trail_color']");
+const trailWidthInput = document.querySelector("#trail-width");
+const trailPreviewLine = document.querySelector("#trail-preview-line");
+const avatarSelect = document.querySelector("#avatar-select");
+const avatarSizeInput = document.querySelector("#avatar-size");
+const avatarPreview = document.querySelector("#avatar-preview");
 
 const dimensions = {
   landscape: "1280 × 720",
@@ -80,6 +86,22 @@ function updateEstimate() {
 function updateFormatBadge() {
   const value = new FormData(form).get("output_format") || "landscape";
   formatBadge.textContent = dimensions[value];
+}
+
+function clampNumber(value, minimum, maximum, fallback) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.min(maximum, Math.max(minimum, parsed));
+}
+
+function updateSizePreviews() {
+  const trailWidth = clampNumber(trailWidthInput.value, 1, 24, 6);
+  trailPreviewLine.style.height = `${trailWidth}px`;
+  trailPreviewLine.style.background = trailColorInput.value || "#ff2f2f";
+
+  const avatarSize = clampNumber(avatarSizeInput.value, 16, 160, 54);
+  const avatarId = avatarSelect.value || "mt15";
+  avatarPreview.src = `/api/avatars/${encodeURIComponent(avatarId)}/preview?size=${avatarSize}`;
 }
 
 // ─── Progress & messages ──────────────────────────
@@ -218,11 +240,13 @@ form.addEventListener("submit", startRender);
 form.addEventListener("input", () => {
   updateEstimate();
   updateFormatBadge();
+  updateSizePreviews();
 });
 form.addEventListener("change", () => {
   updateEstimate();
   updateFormatBadge();
+  updateSizePreviews();
 });
 updateEstimate();
 updateFormatBadge();
-
+updateSizePreviews();

@@ -97,22 +97,39 @@
                 <input name="trail_color" type="color" value="#ff2f2f">
               </label>
               <label class="field">
-                <span>Trail width (px)</span>
-                <input name="trail_width" type="number" min="1" max="24" step="1" value="6">
+                <span>Avatar</span>
+                <select id="avatar-select" name="avatar_id">
+                  {% for avatar_id, avatar_label in avatars.items() %}
+                  <option value="{{ avatar_id }}" {% if loop.first %}selected{% endif %}>{{ avatar_label }}</option>
+                  {% endfor %}
+                </select>
               </label>
               <label class="field">
-                <span>Arrow size (px)</span>
-                <input name="arrow_size" type="number" min="16" max="160" step="1" value="54">
+                <span>Trail width (px)</span>
+                <div class="preview-field">
+                  <input id="trail-width" name="trail_width" type="number" min="1" max="24" step="1" value="6">
+                  <span class="size-preview trail-size-preview" aria-hidden="true">
+                    <span id="trail-preview-line"></span>
+                  </span>
+                </div>
+              </label>
+              <label class="field">
+                <span>Avatar size (px)</span>
+                <div class="preview-field">
+                  <input id="avatar-size" name="arrow_size" type="number" min="16" max="160" step="1" value="54">
+                  <span class="size-preview avatar-size-preview" aria-hidden="true">
+                    <img id="avatar-preview" src="/api/avatars/mt15/preview?size=54" alt="">
+                  </span>
+                </div>
               </label>
 
             </div>
 
             <div class="toggle-grid" style="margin-top: 12px;">
               <label class="toggle-label"><input name="show_progress_bar" type="checkbox" checked> Progress bar</label>
-              <label class="toggle-label"><input name="show_time" type="checkbox" checked> Time</label>
               <label class="toggle-label"><input name="show_distance" type="checkbox" checked> Distance</label>
-              <label class="toggle-label"><input name="show_speed" type="checkbox" checked> Speed</label>
-              <label class="toggle-label"><input name="show_elevation" type="checkbox" checked> Elevation</label>
+              <label class="toggle-label"><input name="show_speed" type="checkbox" checked> Speed graph</label>
+              <label class="toggle-label"><input name="show_elevation" type="checkbox" checked> Elevation graph</label>
             </div>
           </div>
         </details>

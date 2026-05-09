@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from io import BytesIO
 from pathlib import Path
 from uuid import uuid4
 
 from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
@@ -13,8 +14,8 @@ from .config import Settings, load_settings
 from .gpx import parse_gpx_bytes
 from .jobs import JobStore, RenderJob
 from .maps import GoogleStaticMapClient
-from .models import OutputFormat, RenderOptions, validate_render_options
-from .renderer import render_route_video
+from .models import AVAILABLE_AVATARS, OutputFormat, RenderOptions, validate_render_options
+from .renderer import make_arrow, render_route_video
 
 BUDGET_CONFIRMATION_THRESHOLD = 750
 
@@ -44,7 +45,20 @@ def create_app(
 
     @app.get("/")
     async def index(request: Request):
-        return templates.TemplateResponse(request, "index.html", {})
+        return templates.TemplateResponse(request, "index.html", {"avatars": AVAILABLE_AVATARS})
+
+    @app.get("/api/avatars/{avatar_id}/preview")
+    async def avatar_preview(avatar_id: str, size: int = 54):
+        try:
+            options = RenderOptions(avatar_id=avatar_id, arrow_size=size)
+            validate_render_options(options)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+        image = make_arrow(options.arrow_size, options.avatar_id)
+        buffer = BytesIO()
+        image.save(buffer, format="PNG")
+        return Response(content=buffer.getvalue(), media_type="image/png")
 
     @app.post("/api/render")
     async def start_render(
@@ -58,8 +72,8 @@ def create_app(
         trail_color: str = Form("#ff2f2f"),
         trail_width: int = Form(6),
         arrow_size: int = Form(54),
+        avatar_id: str = Form("mt15"),
         show_progress_bar: bool = Form(True),
-        show_time: bool = Form(True),
         show_distance: bool = Form(True),
         show_speed: bool = Form(True),
         show_elevation: bool = Form(True),
@@ -79,8 +93,8 @@ def create_app(
                 trail_color=trail_color,
                 trail_width=trail_width,
                 arrow_size=arrow_size,
+                avatar_id=avatar_id,
                 show_progress_bar=show_progress_bar,
-                show_time=show_time,
                 show_distance=show_distance,
                 show_speed=show_speed,
                 show_elevation=show_elevation,

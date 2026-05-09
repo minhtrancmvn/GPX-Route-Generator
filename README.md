@@ -22,7 +22,7 @@ GOOGLE_MAPS_API_KEY=...
 ## Run
 
 ```bash
-uvicorn gpx_route_generator.app:app --reload
+PYTHONPATH=src uvicorn gpx_route_generator.app:app --reload
 ```
 
 Open http://127.0.0.1:8000, upload a GPX file, choose landscape or portrait output, set a 5-30 second duration, and render.

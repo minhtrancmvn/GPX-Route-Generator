@@ -20,7 +20,7 @@ from .models import RenderOptions, RoutePoint, validate_render_options
 
 ProgressCallback = Callable[[int, int, int], None]
 
-_MOTO_CACHE: tuple[int, Image.Image] | None = None
+_AVATAR_CACHE: dict[tuple[str, int], Image.Image] = {}
 
 
 def render_route_video(
@@ -129,7 +129,7 @@ def compose_frame(
     draw_arrow(overlay, samples, sample_world_pixels, frame_index, camera_center_world, options)
     if options.show_progress_bar:
         draw_progress_bar(draw, frame_index, options)
-    draw_hud(draw, samples, sample_distances, frame_index, options)
+    draw_metric_graphs(draw, samples, sample_distances, frame_index, options)
     return Image.alpha_composite(frame, overlay)
 
 
@@ -162,19 +162,22 @@ def draw_arrow(
         bearing = compute_bearing_degrees(samples[0], samples[min(1, len(samples) - 1)])
     else:
         bearing = compute_bearing_degrees(samples[frame_index - 1], samples[frame_index])
-    arrow = make_arrow(options.arrow_size).rotate(-bearing, expand=True, resample=Image.Resampling.BICUBIC)
+    arrow = make_arrow(options.arrow_size, options.avatar_id).rotate(-bearing, expand=True, resample=Image.Resampling.BICUBIC)
     arrow_x, arrow_y = world_to_frame(sample_world_pixels[frame_index], camera_center_world, options)
     x = int(arrow_x - arrow.width / 2)
     y = int(arrow_y - arrow.height / 2)
     overlay.alpha_composite(arrow, (x, y))
 
 
-def make_arrow(size: int) -> Image.Image:
-    global _MOTO_CACHE
-    moto_path = Path(__file__).parent / "mt15.png"
-    if moto_path.exists():
-        if _MOTO_CACHE is None or _MOTO_CACHE[0] != size:
-            src = Image.open(moto_path).convert("RGBA")
+def make_arrow(size: int, avatar_id: str = "mt15") -> Image.Image:
+    avatar_path = Path(__file__).parent / f"{avatar_id}.png"
+    if avatar_path.exists():
+        cache_key = (avatar_id, size)
+        if cache_key not in _AVATAR_CACHE:
+            src = Image.open(avatar_path).convert("RGBA")
+            content_box = src.getchannel("A").getbbox()
+            if content_box is not None:
+                src = src.crop(content_box)
             # Scale so the long axis (image width = front-to-back) matches size
             aspect = src.width / src.height
             new_w = size
@@ -182,8 +185,8 @@ def make_arrow(size: int) -> Image.Image:
             scaled = src.resize((new_w, new_h), Image.Resampling.LANCZOS)
             # Motorcycle faces right in image; rotate 90° CCW so it points up (north)
             upright = scaled.rotate(90, expand=True, resample=Image.Resampling.BICUBIC)
-            _MOTO_CACHE = (size, upright)
-        return _MOTO_CACHE[1].copy()
+            _AVATAR_CACHE[cache_key] = upright
+        return _AVATAR_CACHE[cache_key].copy()
 
     # Fallback: drawn polygon arrow
     image = Image.new("RGBA", (size, size), (0, 0, 0, 0))
@@ -230,46 +233,125 @@ def draw_distance_badge(
     draw.text((x + pad_x, y + pad_y - 1), text, fill=(255, 255, 255, 255), font=font)
 
 
-def draw_hud(
+def draw_metric_graphs(
     draw: ImageDraw.ImageDraw,
     samples: list[RoutePoint],
     sample_distances: list[float],
     frame_index: int,
     options: RenderOptions,
 ) -> None:
-    entries: list[str] = []
-    elapsed = min(options.duration_seconds, frame_index / options.fps)
-    if options.show_time:
-        entries.append(f"Time {format_elapsed(elapsed)}")
+    metrics: list[tuple[str, list[float | None], tuple[int, int, int, int]]] = []
     if options.show_speed:
-        entries.append(f"Speed {format_speed(samples, sample_distances, frame_index)}")
-    elevation = samples[frame_index].elevation
+        metrics.append(("Speed", speed_series(samples, sample_distances), (63, 146, 255, 245)))
     if options.show_elevation:
-        entries.append(f"Elev {format_elevation(elevation)}")
-    if not entries:
+        metrics.append(("Elevation", elevation_series(samples), (43, 204, 143, 245)))
+    if not metrics:
         return
-    text = "  |  ".join(entries)
-    font = load_font(max(18, int(options.width * 0.030)), bold=True)
-    padding_x = max(14, int(options.width * 0.020))
-    padding_y = max(10, int(options.width * 0.014))
-    bbox = draw.textbbox((0, 0), text, font=font)
-    box_w = bbox[2] - bbox[0] + padding_x * 2
-    box_h = bbox[3] - bbox[1] + padding_y * 2
-    x = max(16, int(options.width * 0.030))
-    y = max(48, int(options.width * 0.075))
-    max_w = options.width - x * 2
-    if box_w > max_w:
-        lines = split_hud_entries(entries)
-        line_bboxes = [draw.textbbox((0, 0), line, font=font) for line in lines]
-        box_w = min(max_w, max(bbox[2] - bbox[0] for bbox in line_bboxes) + padding_x * 2)
-        line_h = max(bbox[3] - bbox[1] for bbox in line_bboxes)
-        box_h = line_h * len(lines) + padding_y * 2 + (len(lines) - 1) * 6
-        draw.rounded_rectangle((x, y, x + box_w, y + box_h), radius=10, fill=(10, 17, 28, 205))
-        for line_index, line in enumerate(lines):
-            draw.text((x + padding_x, y + padding_y + line_index * (line_h + 6)), line, fill=(255, 255, 255, 245), font=font)
+
+    margin_x = max(18, int(options.width * 0.035))
+    margin_bottom = max(18, int(options.height * 0.030))
+    gap = max(10, int(options.width * 0.014))
+    graph_h = min(max(84, int(options.height * 0.15)), 150)
+    x1 = margin_x
+    x2 = options.width - margin_x
+    y2 = options.height - margin_bottom
+    y1 = y2 - graph_h
+
+    if len(metrics) == 1:
+        bounds = [(x1, y1, x2, y2)]
+    else:
+        mid_x = (x1 + x2) / 2
+        bounds = [(x1, y1, mid_x - gap / 2, y2), (mid_x + gap / 2, y1, x2, y2)]
+
+    for metric, metric_bounds in zip(metrics, bounds, strict=True):
+        label, values, color = metric
+        draw_metric_graph(draw, metric_bounds, label, values, frame_index, color, options)
+
+
+def draw_metric_graph(
+    draw: ImageDraw.ImageDraw,
+    bounds: tuple[float, float, float, float],
+    label: str,
+    values: list[float | None],
+    frame_index: int,
+    color: tuple[int, int, int, int],
+    options: RenderOptions,
+) -> None:
+    x1, y1, x2, y2 = bounds
+    panel_w = x2 - x1
+    panel_h = y2 - y1
+    radius = max(8, int(panel_h * 0.12))
+    draw.rounded_rectangle((x1 + 3, y1 + 4, x2 + 3, y2 + 4), radius=radius, fill=(0, 0, 0, 88))
+    draw.rounded_rectangle((x1, y1, x2, y2), radius=radius, fill=(8, 16, 28, 212))
+
+    font = load_font(max(13, min(20, int(options.width * 0.016))), bold=True)
+    pad_x = max(12, int(panel_w * 0.035))
+    pad_top = max(10, int(panel_h * 0.11))
+    pad_bottom = max(10, int(panel_h * 0.12))
+    label_bbox = draw.textbbox((0, 0), label, font=font)
+    label_h = label_bbox[3] - label_bbox[1]
+    draw.text((x1 + pad_x, y1 + pad_top), label, fill=(255, 255, 255, 235), font=font)
+
+    chart_left = x1 + pad_x
+    chart_right = x2 - pad_x
+    chart_top = y1 + pad_top + label_h + max(8, int(panel_h * 0.08))
+    chart_bottom = y2 - pad_bottom
+    if chart_right <= chart_left or chart_bottom <= chart_top:
         return
-    draw.rounded_rectangle((x, y, x + box_w, y + box_h), radius=10, fill=(10, 17, 28, 205))
-    draw.text((x + padding_x, y + padding_y), text, fill=(255, 255, 255, 245), font=font)
+
+    for ratio in (0.25, 0.5, 0.75):
+        y = chart_top + (chart_bottom - chart_top) * ratio
+        draw.line((chart_left, y, chart_right, y), fill=(255, 255, 255, 30), width=1)
+
+    progress = 0.0 if len(values) <= 1 else frame_index / (len(values) - 1)
+    cursor_x = chart_left + (chart_right - chart_left) * clamp(progress, 0.0, 1.0)
+    draw.line((cursor_x, chart_top, cursor_x, chart_bottom), fill=(255, 255, 255, 70), width=1)
+
+    valid_values = [value for value in values if value is not None]
+    if not valid_values:
+        y = chart_bottom
+        draw.line((chart_left, y, chart_right, y), fill=(color[0], color[1], color[2], 120), width=2)
+        return
+
+    minimum = min(valid_values)
+    maximum = max(valid_values)
+    if minimum == maximum:
+        padding = max(1.0, abs(maximum) * 0.1)
+        minimum -= padding
+        maximum += padding
+    span = maximum - minimum
+
+    def graph_point(index: int, value: float) -> tuple[float, float]:
+        value_progress = (value - minimum) / span
+        x = chart_left if len(values) <= 1 else chart_left + (chart_right - chart_left) * index / (len(values) - 1)
+        y = chart_bottom - (chart_bottom - chart_top) * value_progress
+        return x, y
+
+    segment: list[tuple[float, float]] = []
+    current_point: tuple[float, float] | None = None
+    for index, value in enumerate(values):
+        if value is None:
+            if len(segment) > 1:
+                draw.line(segment, fill=color, width=3, joint="curve")
+            elif len(segment) == 1:
+                x, y = segment[0]
+                draw.ellipse((x - 2, y - 2, x + 2, y + 2), fill=color)
+            segment = []
+            continue
+        point = graph_point(index, value)
+        if index == frame_index:
+            current_point = point
+        segment.append(point)
+    if len(segment) > 1:
+        draw.line(segment, fill=color, width=3, joint="curve")
+    elif len(segment) == 1:
+        x, y = segment[0]
+        draw.ellipse((x - 2, y - 2, x + 2, y + 2), fill=color)
+
+    if current_point is not None:
+        x, y = current_point
+        marker_r = max(4, int(panel_h * 0.045))
+        draw.ellipse((x - marker_r, y - marker_r, x + marker_r, y + marker_r), fill=color, outline=(255, 255, 255, 235), width=2)
 
 
 def draw_progress_bar(draw: ImageDraw.ImageDraw, frame_index: int, options: RenderOptions) -> None:
@@ -325,12 +407,6 @@ def load_font(size: int, bold: bool = False) -> ImageFont.FreeTypeFont | ImageFo
     return ImageFont.load_default()
 
 
-def format_elapsed(seconds: float) -> str:
-    total_seconds = max(0, int(round(seconds)))
-    minutes, remainder = divmod(total_seconds, 60)
-    return f"{minutes}:{remainder:02d}"
-
-
 def format_distance(distance_meters: float) -> str:
     km = max(0.0, distance_meters / 1000)
     if km >= 100:
@@ -360,11 +436,29 @@ def format_speed(samples: list[RoutePoint], sample_distances: list[float], frame
     return f"{meters / seconds * 3.6:.0f} km/h"
 
 
-def split_hud_entries(entries: list[str]) -> list[str]:
-    if len(entries) <= 2:
-        return ["  |  ".join(entries)]
-    midpoint = (len(entries) + 1) // 2
-    return ["  |  ".join(entries[:midpoint]), "  |  ".join(entries[midpoint:])]
+def speed_series(samples: list[RoutePoint], sample_distances: list[float]) -> list[float | None]:
+    values = [speed_at_frame(samples, sample_distances, frame_index) for frame_index in range(len(samples))]
+    if len(values) > 1 and values[0] is None:
+        values[0] = values[1]
+    return values
+
+
+def speed_at_frame(samples: list[RoutePoint], sample_distances: list[float], frame_index: int) -> float | None:
+    if frame_index <= 0 or frame_index >= len(samples) or frame_index >= len(sample_distances):
+        return None
+    current = samples[frame_index]
+    previous = samples[frame_index - 1]
+    if current.time is None or previous.time is None:
+        return None
+    seconds = (current.time - previous.time).total_seconds()
+    if seconds <= 0:
+        return None
+    meters = sample_distances[frame_index] - sample_distances[frame_index - 1]
+    return meters / seconds * 3.6
+
+
+def elevation_series(samples: list[RoutePoint]) -> list[float | None]:
+    return [sample.elevation for sample in samples]
 
 
 def clamp(value: float, minimum: float, maximum: float) -> float:

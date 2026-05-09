@@ -39,9 +39,9 @@ def post_render(client: TestClient, **overrides):
         "trail_color": "#ff2f2f",
         "trail_width": "6",
         "arrow_size": "54",
+        "avatar_id": "mt15",
         "camera_smoothing": "0.72",
         "show_progress_bar": "true",
-        "show_time": "true",
         "show_distance": "true",
         "show_speed": "true",
         "show_elevation": "true",
@@ -69,6 +69,17 @@ def test_index_page_loads(tmp_path: Path) -> None:
     response = client.get("/")
     assert response.status_code == 200
     assert "GPX Route Generator" in response.text
+    assert "Avatar size" in response.text
+    assert "Time" not in response.text
+
+
+def test_avatar_preview_loads_without_google_api_key(tmp_path: Path) -> None:
+    app = create_app(settings=make_settings(tmp_path, api_key=None))
+    client = TestClient(app)
+    response = client.get("/api/avatars/mt15/preview?size=64")
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "image/png"
+    assert response.content.startswith(b"\x89PNG")
 
 
 def test_render_validates_duration(tmp_path: Path) -> None:
@@ -77,6 +88,14 @@ def test_render_validates_duration(tmp_path: Path) -> None:
     response = post_render(client, duration_seconds="4")
     assert response.status_code == 422
     assert "Duration" in response.json()["detail"]
+
+
+def test_render_validates_avatar(tmp_path: Path) -> None:
+    app = create_app(settings=make_settings(tmp_path))
+    client = TestClient(app)
+    response = post_render(client, avatar_id="unknown")
+    assert response.status_code == 422
+    assert "Avatar" in response.json()["detail"]
 
 
 def test_render_requires_budget_confirmation_above_threshold(tmp_path: Path) -> None:

@@ -30,9 +30,8 @@ dev = [
 where = ["src"]
 
 [tool.setuptools.package-data]
-gpx_route_generator = ["templates/*.html", "static/*.css", "static/*.js"]
+gpx_route_generator = ["templates/*.html", "static/*.css", "static/*.js", "*.png"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
-

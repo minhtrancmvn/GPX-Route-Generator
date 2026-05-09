@@ -23,6 +23,9 @@ FORMAT_STATIC_SIZES: dict[OutputFormat, tuple[int, int]] = {
 
 
 VALID_MAP_TYPES = {"roadmap", "satellite", "terrain", "hybrid"}
+AVAILABLE_AVATARS = {
+    "mt15": "MT-15",
+}
 
 
 @dataclass(frozen=True)
@@ -43,8 +46,8 @@ class RenderOptions:
     trail_color: str = "#ff2f2f"
     trail_width: int = 6
     arrow_size: int = 54
+    avatar_id: str = "mt15"
     show_progress_bar: bool = True
-    show_time: bool = True
     show_distance: bool = True
     show_speed: bool = True
     show_elevation: bool = True
@@ -86,6 +89,8 @@ def validate_render_options(options: RenderOptions) -> None:
     if not 1 <= options.trail_width <= 24:
         raise ValueError("Trail width must be between 1 and 24 pixels.")
     if not 16 <= options.arrow_size <= 160:
-        raise ValueError("Arrow size must be between 16 and 160 pixels.")
+        raise ValueError("Avatar size must be between 16 and 160 pixels.")
+    if options.avatar_id not in AVAILABLE_AVATARS:
+        raise ValueError("Avatar must be one of: " + ", ".join(AVAILABLE_AVATARS))
     if options.frame_count < 1:
         raise ValueError("Render must include at least one frame.")

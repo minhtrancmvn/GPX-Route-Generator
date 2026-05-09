@@ -248,6 +248,54 @@ legend {
   cursor: pointer;
 }
 
+.preview-field {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 78px;
+  gap: 8px;
+  align-items: center;
+}
+
+.size-preview {
+  display: grid;
+  place-items: center;
+  min-height: 40px;
+  border: 1.5px solid var(--line);
+  border-radius: var(--radius-sm);
+  background:
+    linear-gradient(45deg, #f5f7fb 25%, transparent 25%),
+    linear-gradient(-45deg, #f5f7fb 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #f5f7fb 75%),
+    linear-gradient(-45deg, transparent 75%, #f5f7fb 75%);
+  background-color: #fff;
+  background-position: 0 0, 0 8px, 8px -8px, -8px 0;
+  background-size: 16px 16px;
+  overflow: visible;
+}
+
+.trail-size-preview {
+  min-height: 54px;
+}
+
+#trail-preview-line {
+  display: block;
+  width: 46px;
+  height: 6px;
+  border-radius: 999px;
+  background: #ff2f2f;
+  box-shadow: 0 1px 4px rgba(15, 25, 41, 0.18);
+}
+
+.avatar-size-preview {
+  min-height: 78px;
+  padding: 5px;
+}
+
+#avatar-preview {
+  display: block;
+  max-width: none;
+  filter: drop-shadow(0 2px 4px rgba(15, 25, 41, 0.24));
+}
+
 /* ─── File drop zone ─────────────────────────────── */
 
 .file-drop-zone {
