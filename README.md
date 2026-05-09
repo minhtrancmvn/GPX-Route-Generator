@@ -19,9 +19,26 @@ GOOGLE_MAPS_API_KEY=...
 
 `ffmpeg` must be available on `PATH`.
 
-## Run
+## App commands
+
+Start the app:
 
 ```bash
+PYTHONPATH=src uvicorn gpx_route_generator.app:app --reload
+```
+
+Stop a foreground server with `Ctrl+C`.
+
+Stop a server already running on port 8000:
+
+```bash
+lsof -ti tcp:8000 | xargs kill
+```
+
+Restart the app:
+
+```bash
+lsof -ti tcp:8000 | xargs kill
 PYTHONPATH=src uvicorn gpx_route_generator.app:app --reload
 ```
 
