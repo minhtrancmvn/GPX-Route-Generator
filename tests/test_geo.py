@@ -70,12 +70,6 @@ def test_bearing_points_east() -> None:
     assert bearing == pytest.approx(90, abs=0.01)
 
 
-def test_camera_smoothing_returns_one_center_per_point() -> None:
-    points = [RoutePoint(0, 0), RoutePoint(0, 0.001), RoutePoint(0, 0.002)]
-    centers = smooth_camera_world_pixels(points, zoom=16, smoothing=0.7)
-    assert len(centers) == len(points)
-    assert centers[0] == pytest.approx(lat_lon_to_world_pixel(0, 0, 16))
-    assert centers[-1][0] < lat_lon_to_world_pixel(0, 0.002, 16)[0]
 
 
 def test_overview_zoom_fits_route_without_extra_zoom_out() -> None:
@@ -131,8 +125,17 @@ def test_local_route_window_adds_neighbor_for_sparse_points() -> None:
 
 
 def test_dynamic_route_window_has_long_route_cap() -> None:
-    assert dynamic_route_window_meters(500_000) == pytest.approx(75_000)
-    assert dynamic_route_window_meters(2_000_000) == pytest.approx(90_000)
+    # 500 km / 10 s → 125 000 m/s * 2.5 = 125 000 → capped at 50 000
+    assert dynamic_route_window_meters(500_000, duration_seconds=10) == pytest.approx(50_000)
+    # 2 000 km / 10 s → 500 000 → capped at 50 000
+    assert dynamic_route_window_meters(2_000_000, duration_seconds=10) == pytest.approx(50_000)
+
+
+def test_dynamic_route_window_short_trip_long_duration_zooms_in() -> None:
+    # 5 km / 30 s → 417 m/s * 2.5 = 1 042 → clamped to min 1 000
+    assert dynamic_route_window_meters(5_000, duration_seconds=30) == pytest.approx(1_000)
+    # 20 km / 10 s → 2 000 * 2.5 = 5 000
+    assert dynamic_route_window_meters(20_000, duration_seconds=10) == pytest.approx(5_000)
 
 
 def test_dynamic_camera_zooms_closer_than_full_route_for_long_drive() -> None:
@@ -152,17 +155,18 @@ def test_dynamic_camera_zooms_closer_than_full_route_for_long_drive() -> None:
         height=1280,
         scale=2,
         max_zoom=18,
-        smoothing=0,
+        duration_seconds=10,
+        fps=24,
     )
     assert full_route_zoom <= 7
     assert min(state.zoom for state in states) > full_route_zoom
     assert min(state.zoom for state in states) >= 9
 
 
-def test_duration_validation_is_five_to_fifteen_seconds() -> None:
+def test_duration_validation_is_five_to_thirty_seconds() -> None:
     validate_render_options(RenderOptions(duration_seconds=5))
-    validate_render_options(RenderOptions(duration_seconds=15))
+    validate_render_options(RenderOptions(duration_seconds=30))
     with pytest.raises(ValueError, match="Duration"):
         validate_render_options(RenderOptions(duration_seconds=4.9))
     with pytest.raises(ValueError, match="Duration"):
-        validate_render_options(RenderOptions(duration_seconds=15.1))
+        validate_render_options(RenderOptions(duration_seconds=30.1))

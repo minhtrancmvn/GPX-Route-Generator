@@ -14,11 +14,53 @@ const message = document.querySelector("#message");
 const downloadLink = document.querySelector("#download-link");
 const previewVideo = document.querySelector("#preview-video");
 const emptyState = document.querySelector("#empty-state");
+const stageSpinner = document.querySelector("#stage-spinner");
+const spinnerLabel = document.querySelector("#spinner-label");
+const dropZone = document.querySelector("#drop-zone");
+const dropFilename = document.querySelector("#drop-filename");
+const gpxFileInput = document.querySelector("#gpx-file");
 
 const dimensions = {
-  landscape: "1280 x 720",
-  portrait: "720 x 1280",
+  landscape: "1280 × 720",
+  portrait: "720 × 1280",
 };
+
+// ─── File drop zone ───────────────────────────────
+
+gpxFileInput.addEventListener("change", () => {
+  const file = gpxFileInput.files[0];
+  if (file) {
+    dropZone.classList.add("has-file");
+    dropFilename.textContent = file.name;
+  } else {
+    dropZone.classList.remove("has-file");
+    dropFilename.textContent = "";
+  }
+});
+
+dropZone.addEventListener("dragover", (e) => {
+  e.preventDefault();
+  dropZone.classList.add("drag-over");
+});
+
+dropZone.addEventListener("dragleave", () => {
+  dropZone.classList.remove("drag-over");
+});
+
+dropZone.addEventListener("drop", (e) => {
+  e.preventDefault();
+  dropZone.classList.remove("drag-over");
+  const file = e.dataTransfer.files[0];
+  if (file) {
+    const dt = new DataTransfer();
+    dt.items.add(file);
+    gpxFileInput.files = dt.files;
+    dropZone.classList.add("has-file");
+    dropFilename.textContent = file.name;
+  }
+});
+
+// ─── Estimate / format badge ──────────────────────
 
 function currentEstimate() {
   const duration = Number(durationInput.value || 10);
@@ -40,6 +82,8 @@ function updateFormatBadge() {
   formatBadge.textContent = dimensions[value];
 }
 
+// ─── Progress & messages ──────────────────────────
+
 function setProgress(progress, actualRequests) {
   const percent = Math.round((progress || 0) * 100);
   progressFill.style.width = `${percent}%`;
@@ -47,14 +91,21 @@ function setProgress(progress, actualRequests) {
   requestLabel.textContent = `${actualRequests || 0} actual requests`;
 }
 
-function setMessage(text, isError = false) {
+function setMessage(text, type = "") {
   message.textContent = text;
-  message.classList.toggle("error", isError);
+  message.className = "message" + (type ? ` ${type}` : "");
 }
+
+function setSpinner(active, label = "Rendering…") {
+  stageSpinner.classList.toggle("active", active);
+  spinnerLabel.textContent = label;
+}
+
+// ─── Form payload ─────────────────────────────────
 
 function buildPayload() {
   const payload = new FormData();
-  const file = document.querySelector("#gpx-file").files[0];
+  const file = gpxFileInput.files[0];
   payload.set("gpx_file", file);
   for (const element of form.elements) {
     if (!element.name || element.name === "gpx_file") continue;
@@ -68,6 +119,8 @@ function buildPayload() {
   return payload;
 }
 
+// ─── Render flow ──────────────────────────────────
+
 async function startRender(event) {
   event.preventDefault();
   downloadLink.hidden = true;
@@ -77,14 +130,19 @@ async function startRender(event) {
   setProgress(0, 0);
   setMessage("");
 
-  if (!document.querySelector("#gpx-file").files[0]) {
-    setMessage("Choose a GPX file before rendering.", true);
+  if (!gpxFileInput.files[0]) {
+    setMessage("Choose a GPX file before rendering.", "error");
     return;
   }
 
   renderButton.disabled = true;
-  renderButton.textContent = "Rendering...";
+  renderButton.innerHTML = `
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" style="animation: spin 0.75s linear infinite; display:inline-block">
+      <path d="M8 1a7 7 0 1 0 7 7h-2a5 5 0 1 1-5-5V1Z"/>
+    </svg>
+    Rendering…`;
   statusTitle.textContent = "Starting";
+  setSpinner(true, "Starting…");
 
   try {
     const response = await fetch("/api/render", {
@@ -100,10 +158,17 @@ async function startRender(event) {
     pollJob(data.id);
   } catch (error) {
     statusTitle.textContent = "Ready";
-    setMessage(error.message, true);
-    renderButton.disabled = false;
-    renderButton.textContent = "Render MP4";
+    setMessage(error.message, "error");
+    setSpinner(false);
+    resetButton();
   }
+}
+
+function resetButton() {
+  renderButton.disabled = false;
+  renderButton.innerHTML = `
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M6 3.5l7 4.5-7 4.5V3.5Z"/></svg>
+    Render MP4`;
 }
 
 async function pollJob(jobId) {
@@ -115,6 +180,7 @@ async function pollJob(jobId) {
     }
     statusTitle.textContent = job.status[0].toUpperCase() + job.status.slice(1);
     setProgress(job.progress, job.actual_map_requests);
+    setSpinner(true, `${job.progress_frames || 0} / ${job.total_frames || "?"} frames`);
 
     if (job.status === "completed") {
       const videoUrl = `/api/jobs/${jobId}/video`;
@@ -123,28 +189,30 @@ async function pollJob(jobId) {
       previewVideo.src = videoUrl;
       previewVideo.hidden = false;
       emptyState.hidden = true;
+      setSpinner(false);
       previewVideo.load();
-      setMessage("Render complete.");
-      renderButton.disabled = false;
-      renderButton.textContent = "Render MP4";
+      setMessage("Render complete.", "success");
+      resetButton();
       return;
     }
 
     if (job.status === "failed") {
-      setMessage(job.error || "Render failed.", true);
-      renderButton.disabled = false;
-      renderButton.textContent = "Render MP4";
+      setMessage(job.error || "Render failed.", "error");
+      setSpinner(false);
+      resetButton();
       return;
     }
 
     setMessage(`${job.progress_frames} of ${job.total_frames} frames rendered.`);
     window.setTimeout(() => pollJob(jobId), 1000);
   } catch (error) {
-    setMessage(error.message, true);
-    renderButton.disabled = false;
-    renderButton.textContent = "Render MP4";
+    setMessage(error.message, "error");
+    setSpinner(false);
+    resetButton();
   }
 }
+
+// ─── Event listeners ──────────────────────────────
 
 form.addEventListener("submit", startRender);
 form.addEventListener("input", () => {

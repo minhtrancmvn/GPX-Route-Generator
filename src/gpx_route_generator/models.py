@@ -43,7 +43,6 @@ class RenderOptions:
     trail_color: str = "#ff2f2f"
     trail_width: int = 6
     arrow_size: int = 54
-    camera_smoothing: float = 0.72
     show_progress_bar: bool = True
     show_time: bool = True
     show_distance: bool = True
@@ -76,8 +75,8 @@ class RenderOptions:
 
 
 def validate_render_options(options: RenderOptions) -> None:
-    if not 5 <= options.duration_seconds <= 15:
-        raise ValueError("Duration must be between 5 and 15 seconds.")
+    if not 5 <= options.duration_seconds <= 30:
+        raise ValueError("Duration must be between 5 and 30 seconds.")
     if not 1 <= options.fps <= 60:
         raise ValueError("FPS must be between 1 and 60.")
     if not 1 <= options.zoom <= 21:
@@ -88,7 +87,5 @@ def validate_render_options(options: RenderOptions) -> None:
         raise ValueError("Trail width must be between 1 and 24 pixels.")
     if not 16 <= options.arrow_size <= 160:
         raise ValueError("Arrow size must be between 16 and 160 pixels.")
-    if not 0 <= options.camera_smoothing <= 0.95:
-        raise ValueError("Camera smoothing must be between 0 and 0.95.")
     if options.frame_count < 1:
         raise ValueError("Render must include at least one frame.")

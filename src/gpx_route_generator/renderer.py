@@ -20,6 +20,8 @@ from .models import RenderOptions, RoutePoint, validate_render_options
 
 ProgressCallback = Callable[[int, int, int], None]
 
+_MOTO_CACHE: tuple[int, Image.Image] | None = None
+
 
 def render_route_video(
     points: list[RoutePoint],
@@ -38,7 +40,8 @@ def render_route_video(
         height=options.height,
         scale=options.scale,
         max_zoom=options.zoom,
-        smoothing=options.camera_smoothing,
+        duration_seconds=options.duration_seconds,
+        fps=options.fps,
     )
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -167,6 +170,22 @@ def draw_arrow(
 
 
 def make_arrow(size: int) -> Image.Image:
+    global _MOTO_CACHE
+    moto_path = Path(__file__).parent / "mt15.png"
+    if moto_path.exists():
+        if _MOTO_CACHE is None or _MOTO_CACHE[0] != size:
+            src = Image.open(moto_path).convert("RGBA")
+            # Scale so the long axis (image width = front-to-back) matches size
+            aspect = src.width / src.height
+            new_w = size
+            new_h = max(1, int(size / aspect))
+            scaled = src.resize((new_w, new_h), Image.Resampling.LANCZOS)
+            # Motorcycle faces right in image; rotate 90° CCW so it points up (north)
+            upright = scaled.rotate(90, expand=True, resample=Image.Resampling.BICUBIC)
+            _MOTO_CACHE = (size, upright)
+        return _MOTO_CACHE[1].copy()
+
+    # Fallback: drawn polygon arrow
     image = Image.new("RGBA", (size, size), (0, 0, 0, 0))
     draw = ImageDraw.Draw(image)
     center = size / 2
@@ -222,8 +241,6 @@ def draw_hud(
     elapsed = min(options.duration_seconds, frame_index / options.fps)
     if options.show_time:
         entries.append(f"Time {format_elapsed(elapsed)}")
-    if options.show_distance:
-        entries.append(f"Distance {format_distance(sample_distances[frame_index])}")
     if options.show_speed:
         entries.append(f"Speed {format_speed(samples, sample_distances, frame_index)}")
     elevation = samples[frame_index].elevation

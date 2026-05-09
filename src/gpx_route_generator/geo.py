@@ -119,10 +119,18 @@ def local_route_window_points(
     return window or [points[index]]
 
 
-def dynamic_route_window_meters(total_distance_meters: float) -> float:
+def dynamic_route_window_meters(total_distance_meters: float, duration_seconds: float = 10.0) -> float:
+    """Compute local camera window based on playback speed.
+
+    Faster playback (long trip, short duration) → bigger window → wider view.
+    Slower playback (short trip, long duration) → smaller window → zoomed closer.
+    """
     if total_distance_meters <= 0:
-        return 2_000
-    return max(3_000, min(90_000, total_distance_meters * 0.15))
+        return 1_500
+    meters_per_second = total_distance_meters / max(1.0, duration_seconds)
+    # Show ~2.5 s of content in the local window
+    window = meters_per_second * 2.5
+    return max(1_000, min(50_000, window))
 
 
 def haversine_meters(a: RoutePoint, b: RoutePoint) -> float:
@@ -232,6 +240,43 @@ def overview_camera_world_pixels(
     ]
 
 
+def _smoothstep(t: float) -> float:
+    t = max(0.0, min(1.0, t))
+    return t * t * (3.0 - 2.0 * t)
+
+
+def apply_zoom_transitions(
+    states: list[CameraState],
+    overview_zoom: int,
+    overview_center_world: tuple[float, float],
+    transition_frames: int,
+) -> list[CameraState]:
+    """Blend zoom smoothly at start (zoom-in) and end (zoom-out).
+
+    The camera center stays locked on the avatar at all times — only the zoom
+    level is interpolated so the avatar never drifts off-centre.
+    """
+    n = len(states)
+    if n == 0 or transition_frames <= 0:
+        return states
+    t_frames = min(transition_frames, n // 2)
+    result: list[CameraState] = []
+    for i, state in enumerate(states):
+        if i < t_frames:
+            ease = _smoothstep(i / t_frames)
+        elif i >= n - t_frames:
+            ease = _smoothstep((n - 1 - i) / t_frames)
+        else:
+            ease = 1.0
+        # Interpolate zoom only; center stays on the avatar (state.center_world
+        # is already expressed at state.zoom, so re-project to blended_zoom).
+        blended_zoom = max(1, round(overview_zoom * (1.0 - ease) + state.zoom * ease))
+        avatar_lat, avatar_lon = world_pixel_to_lat_lon(*state.center_world, state.zoom)
+        blended_center = lat_lon_to_world_pixel(avatar_lat, avatar_lon, blended_zoom)
+        result.append(CameraState(zoom=blended_zoom, center_world=blended_center))
+    return result
+
+
 def dynamic_camera_states(
     points: list[RoutePoint],
     distances: list[float],
@@ -239,24 +284,30 @@ def dynamic_camera_states(
     height: int,
     scale: int = 2,
     max_zoom: int = 18,
-    smoothing: float = 0.72,
+    duration_seconds: float = 10.0,
+    fps: int = 24,
 ) -> list[CameraState]:
     if not points:
         return []
     total_distance = distances[-1] if distances else 0
-    window_meters = dynamic_route_window_meters(total_distance)
+    window_meters = dynamic_route_window_meters(total_distance, duration_seconds)
+
+    # Compute a single consistent zoom from the middle of the route's window.
+    mid = len(points) // 2
+    sample_window = local_route_window_points(points, distances, mid, window_meters)
+    zoom = fit_overview_zoom(
+        sample_window,
+        max_zoom=max_zoom,
+        width=width,
+        height=height,
+        scale=scale,
+        padding_ratio=0.06,
+        min_zoom=1,
+    )
+
     target_states: list[CameraState] = []
     for index in range(len(points)):
         window = local_route_window_points(points, distances, index, window_meters)
-        zoom = fit_overview_zoom(
-            window,
-            max_zoom=max_zoom,
-            width=width,
-            height=height,
-            scale=scale,
-            padding_ratio=0.10,
-            min_zoom=1,
-        )
         center = route_center_world_pixel(window, zoom)
         point_center = lat_lon_to_world_pixel(points[index].lat, points[index].lon, zoom)
         blended_center = (
@@ -265,26 +316,7 @@ def dynamic_camera_states(
         )
         target_states.append(CameraState(zoom=zoom, center_world=blended_center))
 
-    smoothing = max(0.0, min(0.95, smoothing))
-    smoothed_states = [target_states[0]]
-    for target in target_states[1:]:
-        previous = smoothed_states[-1]
-        zoom = round(previous.zoom * smoothing + target.zoom * (1 - smoothing))
-        zoom = max(1, min(max_zoom, zoom))
-        previous_center_at_zoom = lat_lon_to_world_pixel(
-            *world_pixel_to_lat_lon(*previous.center_world, previous.zoom),
-            zoom,
-        )
-        target_center_at_zoom = lat_lon_to_world_pixel(
-            *world_pixel_to_lat_lon(*target.center_world, target.zoom),
-            zoom,
-        )
-        center = (
-            previous_center_at_zoom[0] * smoothing + target_center_at_zoom[0] * (1 - smoothing),
-            previous_center_at_zoom[1] * smoothing + target_center_at_zoom[1] * (1 - smoothing),
-        )
-        smoothed_states.append(CameraState(zoom=zoom, center_world=center))
-    return smoothed_states
+    return target_states
 
 
 def with_elapsed_times(samples: list[RoutePoint], duration_seconds: float) -> list[RoutePoint]:
