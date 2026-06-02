@@ -17,14 +17,32 @@ Add your Google Maps Static API key to `.env`:
 GOOGLE_MAPS_API_KEY=...
 ```
 
-`ffmpeg` must be available on `PATH`.
+`ffmpeg` is required for MP4 renders.
 
 ## App commands
 
-Start the app:
+Start the app (uses `--reload-dir src` so the reloader ignores `.venv`):
 
 ```bash
-PYTHONPATH=src uvicorn gpx_route_generator.app:app --reload
+./scripts/dev.sh
+```
+
+The script wraps the underlying command and accepts `HOST`/`PORT` overrides:
+
+```bash
+PORT=9000 ./scripts/dev.sh
+```
+
+Equivalent manual command:
+
+```bash
+PYTHONPATH=src uvicorn gpx_route_generator.app:app --reload --reload-dir src
+```
+
+Frame generation fetches and composes up to 4 frames concurrently by default. Tune with `FRAME_WORKERS` if you want to trade speed for Google Maps request burstiness:
+
+```bash
+FRAME_WORKERS=6 ./scripts/dev.sh
 ```
 
 Stop a foreground server with `Ctrl+C`.
@@ -39,10 +57,49 @@ Restart the app:
 
 ```bash
 lsof -ti tcp:8000 | xargs kill
-PYTHONPATH=src uvicorn gpx_route_generator.app:app --reload
+./scripts/dev.sh
 ```
 
 Open http://127.0.0.1:8000, upload a GPX file, choose landscape or portrait output, set a 5-30 second duration, and render.
+
+## Docker
+
+Build and run locally with Docker Compose:
+
+```bash
+cp .env.example .env
+# Add GOOGLE_MAPS_API_KEY to .env first.
+docker compose up --build
+```
+
+Open http://127.0.0.1:8000. Render outputs are persisted to `./data/jobs` via the bind mount in `docker-compose.yml`.
+
+Tune concurrent frame generation by overriding `FRAME_WORKERS`:
+
+```bash
+FRAME_WORKERS=6 docker compose up --build
+```
+
+Build and run without Compose:
+
+```bash
+docker build -t gpx-route-generator .
+docker run --rm -p 8000:8000 --env-file .env -v "$PWD/data:/app/data" gpx-route-generator
+```
+
+## AWS Lightsail with Docker
+
+1. Create an Ubuntu Lightsail instance, attach a static IP, and allow inbound HTTP/HTTPS in the Lightsail firewall.
+2. Install Docker and the Compose plugin on the instance.
+3. Clone this repository onto the instance.
+4. Create `.env` from `.env.example` and set `GOOGLE_MAPS_API_KEY`.
+5. Start the app:
+
+```bash
+docker compose up -d --build
+```
+
+For production, put Nginx or Caddy in front of the container for HTTPS and proxy traffic to `127.0.0.1:8000`. Keep `./data` on the Lightsail disk, or move completed MP4s to S3 later if you need durable external storage.
 
 ## Notes
 

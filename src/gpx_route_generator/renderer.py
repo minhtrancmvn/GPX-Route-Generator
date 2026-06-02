@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
 from dataclasses import replace
 from io import BytesIO
 from pathlib import Path
+import os
 import subprocess
 
 from PIL import Image, ImageDraw, ImageFont
@@ -21,6 +23,46 @@ from .models import RenderOptions, RoutePoint, validate_render_options
 ProgressCallback = Callable[[int, int, int], None]
 
 _AVATAR_CACHE: dict[tuple[str, int], Image.Image] = {}
+
+
+def _frame_worker_count() -> int:
+    raw_value = os.getenv("FRAME_WORKERS")
+    if raw_value:
+        try:
+            return max(1, min(12, int(raw_value)))
+        except ValueError:
+            return 4
+    return 4
+
+
+def _render_video_frame(
+    *,
+    index: int,
+    samples: list[RoutePoint],
+    sample_distances: list[float],
+    camera_states,
+    options: RenderOptions,
+    map_client: GoogleStaticMapClient,
+) -> bytes:
+    camera_state = camera_states[index]
+    render_options = replace(options, zoom=camera_state.zoom)
+    center_x, center_y = camera_state.center_world
+    sample_world_pixels = [
+        lat_lon_to_world_pixel(sample.lat, sample.lon, render_options.zoom)
+        for sample in samples
+    ]
+    center_lat, center_lon = world_pixel_to_lat_lon(center_x, center_y, render_options.zoom)
+    map_bytes = map_client.fetch(center_lat, center_lon, render_options)
+    frame = compose_frame(
+        map_bytes=map_bytes,
+        samples=samples,
+        sample_world_pixels=sample_world_pixels,
+        sample_distances=sample_distances,
+        frame_index=index,
+        camera_center_world=(center_x, center_y),
+        options=render_options,
+    )
+    return frame.convert("RGB").tobytes()
 
 
 def render_route_video(
@@ -73,29 +115,44 @@ def render_route_video(
     map_requests = 0
     try:
         assert process.stdin is not None
-        for index, point in enumerate(samples):
-            camera_state = camera_states[index]
-            render_options = replace(options, zoom=camera_state.zoom)
-            center_x, center_y = camera_state.center_world
-            sample_world_pixels = [
-                lat_lon_to_world_pixel(sample.lat, sample.lon, render_options.zoom)
-                for sample in samples
-            ]
-            center_lat, center_lon = world_pixel_to_lat_lon(center_x, center_y, render_options.zoom)
-            map_bytes = map_client.fetch(center_lat, center_lon, render_options)
-            map_requests += 1
-            frame = compose_frame(
-                map_bytes=map_bytes,
+        worker_count = min(_frame_worker_count(), options.frame_count)
+        next_submit = 0
+        next_write = 0
+        pending: dict[int, Future[bytes]] = {}
+
+        def submit_frame(executor: ThreadPoolExecutor, index: int) -> None:
+            pending[index] = executor.submit(
+                _render_video_frame,
+                index=index,
                 samples=samples,
-                sample_world_pixels=sample_world_pixels,
                 sample_distances=sample_distances,
-                frame_index=index,
-                camera_center_world=(center_x, center_y),
-                options=render_options,
+                camera_states=camera_states,
+                options=options,
+                map_client=map_client,
             )
-            process.stdin.write(frame.convert("RGB").tobytes())
-            if progress_callback:
-                progress_callback(index + 1, options.frame_count, map_requests)
+
+        with ThreadPoolExecutor(max_workers=worker_count) as executor:
+            while next_submit < min(worker_count, options.frame_count):
+                submit_frame(executor, next_submit)
+                next_submit += 1
+
+            while next_write < options.frame_count:
+                future = pending.get(next_write)
+                if future is not None and future.done():
+                    frame_bytes = future.result()
+                    del pending[next_write]
+                    process.stdin.write(frame_bytes)
+                    map_requests += 1
+                    next_write += 1
+                    if progress_callback:
+                        progress_callback(next_write, options.frame_count, map_requests)
+                    while next_submit < options.frame_count and len(pending) < worker_count:
+                        submit_frame(executor, next_submit)
+                        next_submit += 1
+                    continue
+
+                if pending:
+                    wait(tuple(pending.values()), return_when=FIRST_COMPLETED)
         process.stdin.close()
         stderr = process.stderr.read().decode("utf-8", errors="replace") if process.stderr else ""
         return_code = process.wait()
@@ -125,7 +182,7 @@ def compose_frame(
     draw = ImageDraw.Draw(overlay)
     draw_trail(draw, sample_world_pixels, frame_index, camera_center_world, options)
     if options.show_distance:
-        draw_distance_badge(draw, sample_world_pixels, sample_distances, frame_index, camera_center_world, options)
+        draw_distance_badge(draw, sample_distances, frame_index, options)
     draw_arrow(overlay, samples, sample_world_pixels, frame_index, camera_center_world, options)
     if options.show_progress_bar:
         draw_progress_bar(draw, frame_index, options)
@@ -170,6 +227,28 @@ def draw_arrow(
 
 
 def make_arrow(size: int, avatar_id: str = "mt15") -> Image.Image:
+    if avatar_id == "default":
+        image = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+        draw = ImageDraw.Draw(image)
+        shadow_offset = max(1, size // 18)
+        inset = max(2, size // 12)
+        draw.ellipse(
+            (inset + shadow_offset, inset + shadow_offset, size - inset + shadow_offset, size - inset + shadow_offset),
+            fill=(0, 0, 0, 85),
+        )
+        draw.ellipse(
+            (inset, inset, size - inset, size - inset),
+            fill=(0, 96, 240, 245),
+            outline=(255, 255, 255, 235),
+            width=max(2, size // 16),
+        )
+        highlight = max(3, size // 5)
+        draw.ellipse(
+            (size * 0.32, size * 0.28, size * 0.32 + highlight, size * 0.28 + highlight),
+            fill=(255, 255, 255, 85),
+        )
+        return image
+
     avatar_path = Path(__file__).parent / f"{avatar_id}.png"
     if avatar_path.exists():
         cache_key = (avatar_id, size)
@@ -211,22 +290,22 @@ def make_arrow(size: int, avatar_id: str = "mt15") -> Image.Image:
 
 def draw_distance_badge(
     draw: ImageDraw.ImageDraw,
-    sample_world_pixels: list[tuple[float, float]],
     sample_distances: list[float],
     frame_index: int,
-    camera_center_world: tuple[float, float],
     options: RenderOptions,
 ) -> None:
-    arrow_x, arrow_y = world_to_frame(sample_world_pixels[frame_index], camera_center_world, options)
     text = format_distance(sample_distances[frame_index])
-    font = load_font(max(24, int(options.width * 0.045)), bold=True)
+    font = load_font(max(20, int(options.width * 0.032)), bold=True)
     pad_x = max(12, int(options.width * 0.018))
     pad_y = max(7, int(options.width * 0.010))
     bbox = draw.textbbox((0, 0), text, font=font)
     box_w = bbox[2] - bbox[0] + pad_x * 2
     box_h = bbox[3] - bbox[1] + pad_y * 2
-    x = clamp(arrow_x - box_w * 0.45, 16, options.width - box_w - 16)
-    y = clamp(arrow_y + options.arrow_size * 0.36, 72, options.height - box_h - 72)
+    margin = max(24, int(options.width * 0.05))
+    progress_bottom = max(28, int(options.width * 0.045))
+    gap = max(10, int(options.height * 0.014))
+    x = margin
+    y = progress_bottom + gap if options.show_progress_bar else max(24, int(options.height * 0.035))
     radius = max(8, int(box_h * 0.35))
     draw.rounded_rectangle((x + 3, y + 4, x + box_w + 3, y + box_h + 4), radius=radius, fill=(0, 0, 0, 105))
     draw.rounded_rectangle((x, y, x + box_w, y + box_h), radius=radius, fill=(242, 26, 26, 245))

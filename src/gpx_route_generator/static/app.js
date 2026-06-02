@@ -25,6 +25,8 @@ const trailPreviewLine = document.querySelector("#trail-preview-line");
 const avatarSelect = document.querySelector("#avatar-select");
 const avatarSizeInput = document.querySelector("#avatar-size");
 const avatarPreview = document.querySelector("#avatar-preview");
+const videoStage = document.querySelector("#video-stage");
+const previewImage = document.querySelector("#preview-image");
 
 const dimensions = {
   landscape: "1280 × 720",
@@ -38,9 +40,16 @@ gpxFileInput.addEventListener("change", () => {
   if (file) {
     dropZone.classList.add("has-file");
     dropFilename.textContent = file.name;
+    triggerPreview();
   } else {
+    if (previewAbortController) {
+      previewAbortController.abort();
+    }
     dropZone.classList.remove("has-file");
     dropFilename.textContent = "";
+    previewImage.hidden = true;
+    previewImage.removeAttribute("src");
+    emptyState.hidden = false;
   }
 });
 
@@ -63,15 +72,80 @@ dropZone.addEventListener("drop", (e) => {
     gpxFileInput.files = dt.files;
     dropZone.classList.add("has-file");
     dropFilename.textContent = file.name;
+    triggerPreview();
   }
 });
 
 // ─── Estimate / format badge ──────────────────────
 
+let previewDebounceTimer = null;
+let previewAbortController = null;
+let previewRequestSeq = 0;
+
 function currentEstimate() {
   const duration = Number(durationInput.value || 10);
   const fps = Number(fpsInput.value || 24);
   return Math.round(duration * fps);
+}
+
+function triggerPreview() {
+  if (previewDebounceTimer) {
+    clearTimeout(previewDebounceTimer);
+  }
+  previewDebounceTimer = setTimeout(fetchPreview, 400);
+}
+
+async function fetchPreview() {
+  const file = gpxFileInput.files[0];
+  if (!file) return;
+  if (renderButton.disabled) return;
+
+  if (previewAbortController) {
+    previewAbortController.abort();
+  }
+  previewAbortController = new AbortController();
+  const seq = ++previewRequestSeq;
+
+  videoStage.classList.add("preview-loading");
+  if (message.classList.contains("error") && message.textContent.startsWith("Preview")) {
+    setMessage("");
+  }
+
+  try {
+    const response = await fetch("/api/preview", {
+      method: "POST",
+      body: buildPayload(),
+      signal: previewAbortController.signal,
+    });
+    if (seq !== previewRequestSeq) return;
+    if (!response.ok) {
+      const errData = await response.json().catch(() => ({}));
+      throw new Error(errData.detail || `Preview failed (${response.status})`);
+    }
+    const blob = await response.blob();
+    if (seq !== previewRequestSeq) return;
+    const objectUrl = URL.createObjectURL(blob);
+
+    const previousSrc = previewImage.src;
+    previewImage.src = objectUrl;
+    previewImage.hidden = false;
+    emptyState.hidden = true;
+    previewVideo.hidden = true;
+    if (previousSrc && previousSrc.startsWith("blob:")) {
+      URL.revokeObjectURL(previousSrc);
+    }
+    if (message.classList.contains("error") && message.textContent.startsWith("Preview")) {
+      setMessage("");
+    }
+  } catch (error) {
+    if (error.name === "AbortError" || seq !== previewRequestSeq) return;
+    console.error("Preview failed:", error);
+    setMessage(error.message.startsWith("Preview failed:") ? error.message : "Preview failed: " + error.message, "error");
+  } finally {
+    if (seq === previewRequestSeq) {
+      videoStage.classList.remove("preview-loading");
+    }
+  }
 }
 
 function updateEstimate() {
@@ -148,7 +222,8 @@ async function startRender(event) {
   downloadLink.hidden = true;
   previewVideo.hidden = true;
   previewVideo.removeAttribute("src");
-  emptyState.hidden = false;
+  previewImage.hidden = true;
+  emptyState.hidden = !!gpxFileInput.files[0] ? true : false;
   setProgress(0, 0);
   setMessage("");
 
@@ -211,6 +286,7 @@ async function pollJob(jobId) {
       previewVideo.src = videoUrl;
       previewVideo.hidden = false;
       emptyState.hidden = true;
+      previewImage.hidden = true;
       setSpinner(false);
       previewVideo.load();
       setMessage("Render complete.", "success");
@@ -241,12 +317,16 @@ form.addEventListener("input", () => {
   updateEstimate();
   updateFormatBadge();
   updateSizePreviews();
+  triggerPreview();
 });
 form.addEventListener("change", () => {
   updateEstimate();
   updateFormatBadge();
   updateSizePreviews();
+  triggerPreview();
 });
 updateEstimate();
 updateFormatBadge();
 updateSizePreviews();
+
+videoStage.hidden = false;

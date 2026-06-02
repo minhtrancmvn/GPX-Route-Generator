@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="GPX Route Generator" xmlns="http://www.topografix.com/GPX/1/1">
+  <metadata>
+    <name>Sample Route</name>
+    <desc>A short sample route for testing the preview feature</desc>
+  </metadata>
+  <trk>
+    <name>Sample Track</name>
+    <trkseg>
+      <trkpt lat="37.7749" lon="-122.4194"><ele>10</ele><time>2024-01-01T10:00:00Z</time></trkpt>
+      <trkpt lat="37.7760" lon="-122.4180"><ele>12</ele><time>2024-01-01T10:01:00Z</time></trkpt>
+      <trkpt lat="37.7770" lon="-122.4165"><ele>15</ele><time>2024-01-01T10:02:00Z</time></trkpt>
+      <trkpt lat="37.7780" lon="-122.4150"><ele>18</ele><time>2024-01-01T10:03:00Z</time></trkpt>
+      <trkpt lat="37.7790" lon="-122.4135"><ele>20</ele><time>2024-01-01T10:04:00Z</time></trkpt>
+      <trkpt lat="37.7800" lon="-122.4120"><ele>22</ele><time>2024-01-01T10:05:00Z</time></trkpt>
+    </trkseg>
+  </trk>
+</gpx>

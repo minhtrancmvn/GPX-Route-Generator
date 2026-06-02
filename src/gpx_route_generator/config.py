@@ -24,4 +24,3 @@ def load_settings() -> Settings:
         jobs_dir=project_root / "data" / "jobs",
         ffmpeg_path=os.getenv("FFMPEG_PATH", "ffmpeg"),
     )
-

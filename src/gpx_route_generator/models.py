@@ -10,6 +10,7 @@ class OutputFormat(str, Enum):
     PORTRAIT = "portrait"
 
 
+
 FORMAT_DIMENSIONS: dict[OutputFormat, tuple[int, int]] = {
     OutputFormat.LANDSCAPE: (1280, 720),
     OutputFormat.PORTRAIT: (720, 1280),
@@ -24,6 +25,7 @@ FORMAT_STATIC_SIZES: dict[OutputFormat, tuple[int, int]] = {
 
 VALID_MAP_TYPES = {"roadmap", "satellite", "terrain", "hybrid"}
 AVAILABLE_AVATARS = {
+    "default": "Default",
     "mt15": "MT-15",
 }
 
@@ -46,7 +48,7 @@ class RenderOptions:
     trail_color: str = "#ff2f2f"
     trail_width: int = 6
     arrow_size: int = 54
-    avatar_id: str = "mt15"
+    avatar_id: str = "default"
     show_progress_bar: bool = True
     show_distance: bool = True
     show_speed: bool = True

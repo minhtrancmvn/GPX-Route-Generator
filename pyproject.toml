@@ -30,8 +30,11 @@ dev = [
 where = ["src"]
 
 [tool.setuptools.package-data]
-gpx_route_generator = ["templates/*.html", "static/*.css", "static/*.js", "*.png"]
+gpx_route_generator = ["templates/*.html", "static/*.css", "static/*.js", "static/*.png", "*.png"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
+
+[tool.vercel]
+entrypoint = "src.gpx_route_generator.app:app"

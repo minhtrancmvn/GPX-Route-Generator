@@ -15,6 +15,7 @@ from .gpx import parse_gpx_bytes
 from .jobs import JobStore, RenderJob
 from .maps import GoogleStaticMapClient
 from .models import AVAILABLE_AVATARS, OutputFormat, RenderOptions, validate_render_options
+from .preview import render_preview_frame_2d
 from .renderer import make_arrow, render_route_video
 
 BUDGET_CONFIRMATION_THRESHOLD = 750
@@ -29,6 +30,41 @@ def default_map_client_factory(settings: Settings) -> GoogleStaticMapClient:
         api_key=settings.google_maps_api_key,
         signature_secret=settings.google_maps_signature_secret,
     )
+
+
+def _build_options(
+    *,
+    output_format: str,
+    duration_seconds: float,
+    fps: int,
+    zoom: int,
+    map_type: str,
+    trail_color: str,
+    trail_width: int,
+    arrow_size: int,
+    avatar_id: str,
+    show_progress_bar: bool,
+    show_distance: bool,
+    show_speed: bool,
+    show_elevation: bool,
+) -> RenderOptions:
+    options = RenderOptions(
+        output_format=OutputFormat(output_format),
+        duration_seconds=duration_seconds,
+        fps=fps,
+        zoom=zoom,
+        map_type=map_type,
+        trail_color=trail_color,
+        trail_width=trail_width,
+        arrow_size=arrow_size,
+        avatar_id=avatar_id,
+        show_progress_bar=show_progress_bar,
+        show_distance=show_distance,
+        show_speed=show_speed,
+        show_elevation=show_elevation,
+    )
+    validate_render_options(options)
+    return options
 
 
 def create_app(
@@ -60,9 +96,33 @@ def create_app(
         image.save(buffer, format="PNG")
         return Response(content=buffer.getvalue(), media_type="image/png")
 
-    @app.post("/api/render")
-    async def start_render(
-        background_tasks: BackgroundTasks,
+    @app.get("/api/config")
+    async def public_config():
+        return {
+            "has_google_maps_key": bool(app.state.settings.google_maps_api_key),
+            "avatars": AVAILABLE_AVATARS,
+        }
+
+    @app.post("/api/gpx/parse")
+    async def parse_gpx_endpoint(gpx_file: UploadFile = File(...)):
+        try:
+            points = parse_gpx_bytes(await gpx_file.read())
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        return {
+            "points": [
+                {
+                    "lat": p.lat,
+                    "lon": p.lon,
+                    "elevation": p.elevation,
+                    "time": p.time.isoformat() if p.time else None,
+                }
+                for p in points
+            ],
+        }
+
+    @app.post("/api/preview")
+    async def preview_frame(
         gpx_file: UploadFile = File(...),
         output_format: str = Form("landscape"),
         duration_seconds: float = Form(10),
@@ -72,20 +132,17 @@ def create_app(
         trail_color: str = Form("#ff2f2f"),
         trail_width: int = Form(6),
         arrow_size: int = Form(54),
-        avatar_id: str = Form("mt15"),
+        avatar_id: str = Form("default"),
         show_progress_bar: bool = Form(True),
         show_distance: bool = Form(True),
         show_speed: bool = Form(True),
         show_elevation: bool = Form(True),
-        confirm_over_budget: bool = Form(False),
     ):
         if not app.state.settings.google_maps_api_key:
-            raise HTTPException(status_code=400, detail="Set GOOGLE_MAPS_API_KEY in .env before rendering.")
-
+            raise HTTPException(status_code=400, detail="Set GOOGLE_MAPS_API_KEY in .env before preview.")
         try:
-            parsed_format = OutputFormat(output_format)
-            options = RenderOptions(
-                output_format=parsed_format,
+            options = _build_options(
+                output_format=output_format,
                 duration_seconds=duration_seconds,
                 fps=fps,
                 zoom=zoom,
@@ -99,7 +156,55 @@ def create_app(
                 show_speed=show_speed,
                 show_elevation=show_elevation,
             )
-            validate_render_options(options)
+            points = parse_gpx_bytes(await gpx_file.read())
+            map_client = app.state.map_client_factory(app.state.settings)
+            image = render_preview_frame_2d(points, options, map_client)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=f"Preview failed: {exc}") from exc
+
+        buffer = BytesIO()
+        image.save(buffer, format="PNG")
+        return Response(content=buffer.getvalue(), media_type="image/png")
+
+    @app.post("/api/render")
+    async def start_render(
+        background_tasks: BackgroundTasks,
+        gpx_file: UploadFile = File(...),
+        output_format: str = Form("landscape"),
+        duration_seconds: float = Form(10),
+        fps: int = Form(24),
+        zoom: int = Form(18),
+        map_type: str = Form("roadmap"),
+        trail_color: str = Form("#ff2f2f"),
+        trail_width: int = Form(6),
+        arrow_size: int = Form(54),
+        avatar_id: str = Form("default"),
+        show_progress_bar: bool = Form(True),
+        show_distance: bool = Form(True),
+        show_speed: bool = Form(True),
+        show_elevation: bool = Form(True),
+        confirm_over_budget: bool = Form(False),
+    ):
+        if not app.state.settings.google_maps_api_key:
+            raise HTTPException(status_code=400, detail="Set GOOGLE_MAPS_API_KEY in .env before rendering.")
+        try:
+            options = _build_options(
+                output_format=output_format,
+                duration_seconds=duration_seconds,
+                fps=fps,
+                zoom=zoom,
+                map_type=map_type,
+                trail_color=trail_color,
+                trail_width=trail_width,
+                arrow_size=arrow_size,
+                avatar_id=avatar_id,
+                show_progress_bar=show_progress_bar,
+                show_distance=show_distance,
+                show_speed=show_speed,
+                show_elevation=show_elevation,
+            )
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
@@ -153,8 +258,6 @@ def run_render_job(app: FastAPI, job_id: str, points, options: RenderOptions) ->
     settings: Settings = app.state.settings
     app.state.jobs.update(job_id, status="running")
     try:
-        map_client = app.state.map_client_factory(settings)
-
         def update_progress(done: int, total: int, map_requests: int) -> None:
             app.state.jobs.update(
                 job_id,
@@ -166,6 +269,7 @@ def run_render_job(app: FastAPI, job_id: str, points, options: RenderOptions) ->
         job = app.state.jobs.get(job_id)
         if job is None:
             return
+        map_client = app.state.map_client_factory(settings)
         render_route_video(
             points=points,
             options=options,

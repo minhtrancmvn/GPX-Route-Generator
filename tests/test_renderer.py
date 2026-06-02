@@ -61,6 +61,32 @@ def test_avatar_size_scales_visible_sprite() -> None:
     large_long_axis = max(large[2] - large[0], large[3] - large[1])
     assert large_long_axis > small_long_axis * 3
 
+def test_default_avatar_renders_blob_icon() -> None:
+    image = make_arrow(54, "default")
+    assert image.size == (54, 54)
+    assert image.getchannel("A").getbbox() is not None
+
+def test_distance_badge_uses_fixed_top_left_hud_position() -> None:
+    options = RenderOptions(
+        show_distance=True,
+        show_progress_bar=True,
+        show_speed=False,
+        show_elevation=False,
+    )
+    samples, sample_world_pixels, sample_distances = make_route()
+    image = compose_frame(
+        map_bytes=make_map_bytes(options),
+        samples=samples,
+        sample_world_pixels=sample_world_pixels,
+        sample_distances=sample_distances,
+        frame_index=2,
+        camera_center_world=sample_world_pixels[2],
+        options=options,
+    ).convert("RGB")
+
+    x = max(24, int(options.width * 0.05)) + 6
+    y = max(28, int(options.width * 0.045)) + max(10, int(options.height * 0.014)) + 6
+    assert image.getpixel((x, y)) != BACKGROUND
 
 def test_speed_and_elevation_graphs_split_bottom_area() -> None:
     image = render_graph_frame(show_speed=True, show_elevation=True)

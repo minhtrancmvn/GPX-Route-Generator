@@ -70,16 +70,46 @@ def test_index_page_loads(tmp_path: Path) -> None:
     assert response.status_code == 200
     assert "GPX Route Generator" in response.text
     assert "Avatar size" in response.text
+    assert "3D globe" not in response.text
     assert "Time" not in response.text
 
 
 def test_avatar_preview_loads_without_google_api_key(tmp_path: Path) -> None:
     app = create_app(settings=make_settings(tmp_path, api_key=None))
     client = TestClient(app)
-    response = client.get("/api/avatars/mt15/preview?size=64")
+    response = client.get("/api/avatars/default/preview?size=64")
     assert response.status_code == 200
     assert response.headers["content-type"] == "image/png"
     assert response.content.startswith(b"\x89PNG")
+
+def test_preview_frame_uses_single_map_request(tmp_path: Path) -> None:
+    map_client = SolidColorMapClient()
+    app = create_app(settings=make_settings(tmp_path), map_client_factory=lambda settings: map_client)
+    client = TestClient(app)
+    response = client.post(
+        "/api/preview",
+        data={
+            "render_mode": "video2d",
+            "output_format": "landscape",
+            "duration_seconds": "5",
+            "fps": "1",
+            "zoom": "16",
+            "map_type": "roadmap",
+            "trail_color": "#ff2f2f",
+            "trail_width": "6",
+            "arrow_size": "54",
+            "avatar_id": "default",
+            "show_progress_bar": "true",
+            "show_distance": "true",
+            "show_speed": "true",
+            "show_elevation": "true",
+        },
+        files={"gpx_file": ("route.gpx", VALID_GPX, "application/gpx+xml")},
+    )
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "image/png"
+    assert response.content.startswith(b"\x89PNG")
+    assert map_client.requests == 1
 
 
 def test_render_validates_duration(tmp_path: Path) -> None:

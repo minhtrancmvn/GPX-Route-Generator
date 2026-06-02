@@ -1,0 +1,16 @@
+.git
+.gitignore
+.venv
+.pytest_cache
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+*.log
+.env
+data/jobs
+.claude
+.gitnexus
+GPX Route Generator.code-workspace
+patch_renderer.py
+tests

@@ -27,8 +27,8 @@
       <form id="render-form" class="panel controls">
         <div class="panel-header">
           <div>
-            <p class="eyebrow">Configuration</p>
-            <h1>Render settings</h1>
+            <p class="eyebrow">Video settings</p>
+            <h1>2D map animation</h1>
           </div>
           <span class="badge" id="request-estimate">240 map requests</span>
         </div>
@@ -84,7 +84,7 @@
           <div class="advanced-content">
             <div class="advanced-grid">
               <label class="field">
-                <span>Map type</span>
+                <span>Map style</span>
                 <select name="map_type">
                   <option value="roadmap" selected>Roadmap</option>
                   <option value="satellite">Satellite</option>
@@ -99,8 +99,8 @@
               <label class="field">
                 <span>Avatar</span>
                 <select id="avatar-select" name="avatar_id">
-                  {% for avatar_id, avatar_label in avatars.items() %}
-                  <option value="{{ avatar_id }}" {% if loop.first %}selected{% endif %}>{{ avatar_label }}</option>
+                 {% for avatar_id, avatar_label in avatars.items() %}
+                  <option value="{{ avatar_id }}" {% if avatar_id == "default" %}selected{% endif %}>{{ avatar_label }}</option>
                   {% endfor %}
                 </select>
               </label>
@@ -118,7 +118,7 @@
                 <div class="preview-field">
                   <input id="avatar-size" name="arrow_size" type="number" min="16" max="160" step="1" value="54">
                   <span class="size-preview avatar-size-preview" aria-hidden="true">
-                    <img id="avatar-preview" src="/api/avatars/mt15/preview?size=54" alt="">
+                    <img id="avatar-preview" src="/api/avatars/default/preview?size=54" alt="">
                   </span>
                 </div>
               </label>
@@ -162,8 +162,10 @@
               </svg>
             </div>
             <strong>No render yet</strong>
-            <span>Upload a GPX file and click Render MP4 to generate your route video.</span>
+            <span>Upload a GPX file to preview the first frame, then click Render MP4 when settings look right.</span>
           </div>
+
+          <img id="preview-image" class="preview-image" alt="First frame preview" hidden>
 
           <div class="stage-spinner" id="stage-spinner">
             <div class="spinner-ring"></div>
