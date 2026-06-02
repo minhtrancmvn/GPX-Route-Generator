@@ -27,6 +27,7 @@ const avatarSizeInput = document.querySelector("#avatar-size");
 const avatarPreview = document.querySelector("#avatar-preview");
 const videoStage = document.querySelector("#video-stage");
 const previewImage = document.querySelector("#preview-image");
+const appConfig = window.appConfig || {};
 
 const dimensions = {
   landscape: "1280 × 720",
@@ -215,6 +216,21 @@ function buildPayload() {
   return payload;
 }
 
+async function attachRecaptchaToken(payload) {
+  if (!appConfig.recaptchaEnabled) {
+    return payload;
+  }
+
+  if (!window.grecaptcha || !appConfig.recaptchaSiteKey) {
+    throw new Error("reCAPTCHA is not available right now. Please refresh and try again.");
+  }
+
+  await new Promise((resolve) => window.grecaptcha.ready(resolve));
+  const token = await window.grecaptcha.execute(appConfig.recaptchaSiteKey, { action: "render_mp4" });
+  payload.set("recaptcha_token", token);
+  return payload;
+}
+
 // ─── Render flow ──────────────────────────────────
 
 async function startRender(event) {
@@ -242,9 +258,10 @@ async function startRender(event) {
   setSpinner(true, "Starting…");
 
   try {
+    const payload = await attachRecaptchaToken(buildPayload());
     const response = await fetch("/api/render", {
       method: "POST",
-      body: buildPayload(),
+      body: payload,
     });
     const data = await response.json();
     if (!response.ok) {
@@ -257,6 +274,10 @@ async function startRender(event) {
     statusTitle.textContent = "Ready";
     setMessage(error.message, "error");
     setSpinner(false);
+    if (error.message.includes("reCAPTCHA score is too low")) {
+      renderButton.innerHTML = "Blocked by reCAPTCHA";
+      return;
+    }
     resetButton();
   }
 }

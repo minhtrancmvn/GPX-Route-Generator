@@ -17,6 +17,16 @@ Add your Google Maps Static API key to `.env`:
 GOOGLE_MAPS_API_KEY=...
 ```
 
+Optional production-only reCAPTCHA v3 settings for the `Render MP4` button:
+
+```bash
+APP_ENV=local
+RECAPTCHA_SITE_KEY=...
+RECAPTCHA_SECRET_KEY=...
+```
+
+Keep `APP_ENV=local` for development so reCAPTCHA stays hidden locally. Set `APP_ENV=production` on your deployed server to require a reCAPTCHA token before `/api/render` starts a job.
+
 `ffmpeg` is required for MP4 renders.
 
 ## App commands
@@ -92,7 +102,7 @@ docker run --rm -p 8000:8000 --env-file .env -v "$PWD/data:/app/data" gpx-route-
 1. Create an Ubuntu Lightsail instance, attach a static IP, and allow inbound HTTP/HTTPS in the Lightsail firewall.
 2. Install Docker and the Compose plugin on the instance.
 3. Clone this repository onto the instance.
-4. Create `.env` from `.env.example` and set `GOOGLE_MAPS_API_KEY`.
+4. Create `.env` from `.env.example` and set `GOOGLE_MAPS_API_KEY`. If you want to protect renders, also set `APP_ENV=production`, `RECAPTCHA_SITE_KEY`, and `RECAPTCHA_SECRET_KEY`.
 5. Start the app:
 
 ```bash

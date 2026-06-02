@@ -5,6 +5,7 @@ from io import BytesIO
 from pathlib import Path
 from uuid import uuid4
 
+import requests
 from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
@@ -19,6 +20,8 @@ from .preview import render_preview_frame_2d
 from .renderer import make_arrow, render_route_video
 
 BUDGET_CONFIRMATION_THRESHOLD = 750
+RECAPTCHA_MIN_SCORE = 0.5
+RECAPTCHA_VERIFY_URL = "https://www.google.com/recaptcha/api/siteverify"
 
 MapClientFactory = Callable[[Settings], GoogleStaticMapClient]
 
@@ -81,7 +84,15 @@ def create_app(
 
     @app.get("/")
     async def index(request: Request):
-        return templates.TemplateResponse(request, "index.html", {"avatars": AVAILABLE_AVATARS})
+        return templates.TemplateResponse(
+            request,
+            "index.html",
+            {
+                "avatars": AVAILABLE_AVATARS,
+                "recaptcha_enabled": app.state.settings.recaptcha_enabled,
+                "recaptcha_site_key": app.state.settings.recaptcha_site_key,
+            },
+        )
 
     @app.get("/api/avatars/{avatar_id}/preview")
     async def avatar_preview(avatar_id: str, size: int = 54):
@@ -101,7 +112,36 @@ def create_app(
         return {
             "has_google_maps_key": bool(app.state.settings.google_maps_api_key),
             "avatars": AVAILABLE_AVATARS,
+            "recaptcha_enabled": app.state.settings.recaptcha_enabled,
+            "recaptcha_site_key": app.state.settings.recaptcha_site_key if app.state.settings.recaptcha_enabled else None,
         }
+
+    def verify_recaptcha(token: str | None, remote_ip: str | None) -> None:
+        settings: Settings = app.state.settings
+        if not settings.recaptcha_enabled:
+            return
+        if not token:
+            raise HTTPException(status_code=400, detail="reCAPTCHA verification is required.")
+
+        try:
+            response = requests.post(
+                RECAPTCHA_VERIFY_URL,
+                data={
+                    "secret": settings.recaptcha_secret_key,
+                    "response": token,
+                    "remoteip": remote_ip,
+                },
+                timeout=10,
+            )
+            payload = response.json()
+        except requests.RequestException as exc:
+            raise HTTPException(status_code=502, detail="reCAPTCHA verification failed. Please try again.") from exc
+
+        if not payload.get("success"):
+            raise HTTPException(status_code=400, detail="reCAPTCHA verification failed. Please try again.")
+        score = payload.get("score")
+        if score is None or float(score) < RECAPTCHA_MIN_SCORE:
+            raise HTTPException(status_code=403, detail="reCAPTCHA score is too low. Rendering is blocked.")
 
     @app.post("/api/gpx/parse")
     async def parse_gpx_endpoint(gpx_file: UploadFile = File(...)):
@@ -170,6 +210,7 @@ def create_app(
 
     @app.post("/api/render")
     async def start_render(
+        request: Request,
         background_tasks: BackgroundTasks,
         gpx_file: UploadFile = File(...),
         output_format: str = Form("landscape"),
@@ -186,9 +227,11 @@ def create_app(
         show_speed: bool = Form(True),
         show_elevation: bool = Form(True),
         confirm_over_budget: bool = Form(False),
+        recaptcha_token: str | None = Form(None),
     ):
         if not app.state.settings.google_maps_api_key:
             raise HTTPException(status_code=400, detail="Set GOOGLE_MAPS_API_KEY in .env before rendering.")
+        verify_recaptcha(recaptcha_token, request.client.host if request.client else None)
         try:
             options = _build_options(
                 output_format=output_format,
