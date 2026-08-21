@@ -14,19 +14,18 @@ from fastapi.templating import Jinja2Templates
 from .config import Settings, load_settings
 from .gpx import parse_gpx_bytes
 from .jobs import JobStore, RenderJob
-from .maps import GoogleStaticMapClient
+from .maps import GoogleStaticMapClient, StaticMapClient
 from .models import AVAILABLE_AVATARS, OutputFormat, RenderOptions, validate_render_options
 from .preview import render_preview_frame_2d
 from .renderer import make_arrow, render_route_video
 
-BUDGET_CONFIRMATION_THRESHOLD = 750
 RECAPTCHA_MIN_SCORE = 0.5
 RECAPTCHA_VERIFY_URL = "https://www.google.com/recaptcha/api/siteverify"
 
-MapClientFactory = Callable[[Settings], GoogleStaticMapClient]
+MapClientFactory = Callable[[Settings], StaticMapClient]
 
 
-def default_map_client_factory(settings: Settings) -> GoogleStaticMapClient:
+def default_map_client_factory(settings: Settings) -> StaticMapClient:
     if not settings.google_maps_api_key:
         raise ValueError("Set GOOGLE_MAPS_API_KEY in .env before rendering.")
     return GoogleStaticMapClient(
@@ -167,7 +166,7 @@ def create_app(
         output_format: str = Form("landscape"),
         duration_seconds: float = Form(10),
         fps: int = Form(24),
-        zoom: int = Form(18),
+        zoom: int = Form(14),
         map_type: str = Form("roadmap"),
         trail_color: str = Form("#ff2f2f"),
         trail_width: int = Form(6),
@@ -216,7 +215,7 @@ def create_app(
         output_format: str = Form("landscape"),
         duration_seconds: float = Form(10),
         fps: int = Form(24),
-        zoom: int = Form(18),
+        zoom: int = Form(14),
         map_type: str = Form("roadmap"),
         trail_color: str = Form("#ff2f2f"),
         trail_width: int = Form(6),
@@ -226,7 +225,6 @@ def create_app(
         show_distance: bool = Form(True),
         show_speed: bool = Form(True),
         show_elevation: bool = Form(True),
-        confirm_over_budget: bool = Form(False),
         recaptcha_token: str | None = Form(None),
     ):
         if not app.state.settings.google_maps_api_key:
@@ -250,15 +248,6 @@ def create_app(
             )
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
-
-        if options.estimated_map_requests > BUDGET_CONFIRMATION_THRESHOLD and not confirm_over_budget:
-            raise HTTPException(
-                status_code=409,
-                detail=(
-                    f"This render is estimated to request {options.estimated_map_requests} Google maps. "
-                    f"Confirm renders above {BUDGET_CONFIRMATION_THRESHOLD} requests to continue."
-                ),
-            )
 
         try:
             points = parse_gpx_bytes(await gpx_file.read())
@@ -325,7 +314,6 @@ def run_render_job(app: FastAPI, job_id: str, points, options: RenderOptions) ->
             job_id,
             status="completed",
             progress_frames=options.frame_count,
-            actual_map_requests=options.estimated_map_requests,
         )
     except Exception as exc:
         app.state.jobs.update(job_id, status="failed", error=str(exc))

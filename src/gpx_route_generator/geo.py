@@ -292,18 +292,9 @@ def dynamic_camera_states(
     total_distance = distances[-1] if distances else 0
     window_meters = dynamic_route_window_meters(total_distance, duration_seconds)
 
-    # Compute a single consistent zoom from the middle of the route's window.
-    mid = len(points) // 2
-    sample_window = local_route_window_points(points, distances, mid, window_meters)
-    zoom = fit_overview_zoom(
-        sample_window,
-        max_zoom=max_zoom,
-        width=width,
-        height=height,
-        scale=scale,
-        padding_ratio=0.06,
-        min_zoom=1,
-    )
+    # Keep a consistent reference-scale zoom. The cached map segment planner
+    # widens this only when a route cannot fit within its 12-image cap.
+    zoom = max_zoom
 
     target_states: list[CameraState] = []
     for index in range(len(points)):

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
+from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, as_completed, wait
 from dataclasses import replace
 from io import BytesIO
 from pathlib import Path
@@ -15,9 +15,9 @@ from .geo import (
     dynamic_camera_states,
     lat_lon_to_world_pixel,
     resample_by_distance,
-    world_pixel_to_lat_lon,
 )
-from .maps import GoogleStaticMapClient
+from .map_segments import MapSegment, MapSegmentPlan, build_map_segment_plan, prepare_segment_frame
+from .maps import StaticMapClient
 from .models import RenderOptions, RoutePoint, validate_render_options
 
 ProgressCallback = Callable[[int, int, int], None]
@@ -35,31 +35,68 @@ def _frame_worker_count() -> int:
     return 4
 
 
+def _fetch_segment_image(
+    segment: MapSegment,
+    options: RenderOptions,
+    map_client: StaticMapClient,
+) -> Image.Image:
+    center_lat, center_lon = segment.center_lat_lon
+    map_bytes = map_client.fetch(
+        center_lat,
+        center_lon,
+        options,
+        zoom=segment.source_zoom,
+        static_size=(640, 640),
+    )
+    return Image.open(BytesIO(map_bytes)).convert("RGBA")
+
+
+def _prefetch_segment_images(
+    plan: MapSegmentPlan,
+    options: RenderOptions,
+    map_client: StaticMapClient,
+) -> dict[int, Image.Image]:
+    if not plan.segments:
+        return {}
+    images: dict[int, Image.Image] = {}
+    worker_count = min(_frame_worker_count(), len(plan.segments))
+    with ThreadPoolExecutor(max_workers=worker_count) as executor:
+        pending = {
+            executor.submit(_fetch_segment_image, segment, options, map_client): segment
+            for segment in plan.segments
+        }
+        for future in as_completed(pending):
+            segment = pending[future]
+            try:
+                images[segment.id] = future.result()
+            except Exception as exc:
+                for image in images.values():
+                    image.close()
+                raise RuntimeError(f"Google Static Map segment {segment.id} could not be fetched.") from exc
+    return images
+
+
 def _render_video_frame(
     *,
     index: int,
     samples: list[RoutePoint],
     sample_distances: list[float],
-    camera_states,
+    sample_world_pixels: list[tuple[float, float]],
+    plan: MapSegmentPlan,
+    segment_images: dict[int, Image.Image],
     options: RenderOptions,
-    map_client: GoogleStaticMapClient,
 ) -> bytes:
-    camera_state = camera_states[index]
+    camera_state = plan.camera_states[index]
     render_options = replace(options, zoom=camera_state.zoom)
-    center_x, center_y = camera_state.center_world
-    sample_world_pixels = [
-        lat_lon_to_world_pixel(sample.lat, sample.lon, render_options.zoom)
-        for sample in samples
-    ]
-    center_lat, center_lon = world_pixel_to_lat_lon(center_x, center_y, render_options.zoom)
-    map_bytes = map_client.fetch(center_lat, center_lon, render_options)
+    segment = plan.segment_for_frame(index)
+    prepared_map = prepare_segment_frame(segment_images[segment.id], segment, camera_state, render_options)
     frame = compose_frame(
-        map_bytes=map_bytes,
+        map_bytes=prepared_map,
         samples=samples,
         sample_world_pixels=sample_world_pixels,
         sample_distances=sample_distances,
         frame_index=index,
-        camera_center_world=(center_x, center_y),
+        camera_center_world=camera_state.center_world,
         options=render_options,
     )
     return frame.convert("RGB").tobytes()
@@ -69,7 +106,7 @@ def render_route_video(
     points: list[RoutePoint],
     options: RenderOptions,
     output_path: Path,
-    map_client: GoogleStaticMapClient,
+    map_client: StaticMapClient,
     ffmpeg_path: str = "ffmpeg",
     progress_callback: ProgressCallback | None = None,
 ) -> None:
@@ -85,6 +122,13 @@ def render_route_video(
         duration_seconds=options.duration_seconds,
         fps=options.fps,
     )
+    plan = build_map_segment_plan(camera_states, options)
+    sample_world_pixels = [
+        lat_lon_to_world_pixel(sample.lat, sample.lon, plan.camera_states[0].zoom)
+        for sample in samples
+    ]
+    segment_images = _prefetch_segment_images(plan, options, map_client)
+    map_requests = plan.map_request_count
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
     command = [
@@ -112,7 +156,6 @@ def render_route_video(
         str(output_path),
     ]
     process = subprocess.Popen(command, stdin=subprocess.PIPE, stderr=subprocess.PIPE)
-    map_requests = 0
     try:
         assert process.stdin is not None
         worker_count = min(_frame_worker_count(), options.frame_count)
@@ -126,9 +169,10 @@ def render_route_video(
                 index=index,
                 samples=samples,
                 sample_distances=sample_distances,
-                camera_states=camera_states,
+                sample_world_pixels=sample_world_pixels,
+                plan=plan,
+                segment_images=segment_images,
                 options=options,
-                map_client=map_client,
             )
 
         with ThreadPoolExecutor(max_workers=worker_count) as executor:
@@ -142,7 +186,6 @@ def render_route_video(
                     frame_bytes = future.result()
                     del pending[next_write]
                     process.stdin.write(frame_bytes)
-                    map_requests += 1
                     next_write += 1
                     if progress_callback:
                         progress_callback(next_write, options.frame_count, map_requests)
@@ -164,10 +207,14 @@ def render_route_video(
         process.kill()
         process.wait()
         raise
+    finally:
+        for image in segment_images.values():
+            image.close()
+        segment_images.clear()
 
 
 def compose_frame(
-    map_bytes: bytes,
+    map_bytes: bytes | Image.Image,
     samples: list[RoutePoint],
     sample_world_pixels: list[tuple[float, float]],
     sample_distances: list[float],
@@ -175,7 +222,7 @@ def compose_frame(
     camera_center_world: tuple[float, float],
     options: RenderOptions,
 ) -> Image.Image:
-    frame = Image.open(BytesIO(map_bytes)).convert("RGBA")
+    frame = map_bytes.copy() if isinstance(map_bytes, Image.Image) else Image.open(BytesIO(map_bytes)).convert("RGBA")
     if frame.size != (options.width, options.height):
         frame = frame.resize((options.width, options.height), Image.Resampling.LANCZOS)
     overlay = Image.new("RGBA", frame.size, (0, 0, 0, 0))

@@ -38,7 +38,7 @@ def post_render(client: TestClient, **overrides):
         "output_format": "landscape",
         "duration_seconds": "5",
         "fps": "1",
-        "zoom": "16",
+        "zoom": "14",
         "map_type": "roadmap",
         "trail_color": "#ff2f2f",
         "trail_width": "6",
@@ -49,7 +49,6 @@ def post_render(client: TestClient, **overrides):
         "show_distance": "true",
         "show_speed": "true",
         "show_elevation": "true",
-        "confirm_over_budget": "false",
     }
     data.update(overrides)
     return client.post(
@@ -114,7 +113,7 @@ def test_preview_frame_uses_single_map_request(tmp_path: Path) -> None:
             "output_format": "landscape",
             "duration_seconds": "5",
             "fps": "1",
-            "zoom": "16",
+            "zoom": "14",
             "map_type": "roadmap",
             "trail_color": "#ff2f2f",
             "trail_width": "6",
@@ -148,13 +147,6 @@ def test_render_validates_avatar(tmp_path: Path) -> None:
     assert response.status_code == 422
     assert "Avatar" in response.json()["detail"]
 
-
-def test_render_requires_budget_confirmation_above_threshold(tmp_path: Path) -> None:
-    app = create_app(settings=make_settings(tmp_path))
-    client = TestClient(app)
-    response = post_render(client, duration_seconds="15", fps="60")
-    assert response.status_code == 409
-    assert "900 Google maps" in response.json()["detail"]
 
 def test_render_requires_recaptcha_in_production(tmp_path: Path) -> None:
     settings = Settings(
@@ -240,7 +232,8 @@ def test_render_job_completes_with_mocked_maps(tmp_path: Path) -> None:
     payload = status.json()
     assert payload["status"] == "completed"
     assert payload["progress"] == 1
-    assert payload["actual_map_requests"] == 5
+    assert 1 <= payload["actual_map_requests"] < 5
+    assert map_client.requests == payload["actual_map_requests"]
 
     video = client.get(f"/api/jobs/{job_id}/video")
     assert video.status_code == 200

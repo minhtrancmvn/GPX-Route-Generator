@@ -1,9 +1,5 @@
 const form = document.querySelector("#render-form");
-const durationInput = document.querySelector("#duration");
-const fpsInput = document.querySelector("#fps");
 const requestEstimate = document.querySelector("#request-estimate");
-const budgetConfirm = document.querySelector("#budget-confirm");
-const confirmOverBudget = document.querySelector("#confirm-over-budget");
 const renderButton = document.querySelector("#render-button");
 const statusTitle = document.querySelector("#status-title");
 const formatBadge = document.querySelector("#format-badge");
@@ -83,12 +79,6 @@ let previewDebounceTimer = null;
 let previewAbortController = null;
 let previewRequestSeq = 0;
 
-function currentEstimate() {
-  const duration = Number(durationInput.value || 10);
-  const fps = Number(fpsInput.value || 24);
-  return Math.round(duration * fps);
-}
-
 function triggerPreview() {
   if (previewDebounceTimer) {
     clearTimeout(previewDebounceTimer);
@@ -150,12 +140,7 @@ async function fetchPreview() {
 }
 
 function updateEstimate() {
-  const estimate = currentEstimate();
-  requestEstimate.textContent = `${estimate} map requests`;
-  budgetConfirm.hidden = estimate <= 750;
-  if (estimate <= 750) {
-    confirmOverBudget.checked = false;
-  }
+  requestEstimate.textContent = "up to 12 Google map images";
 }
 
 function updateFormatBadge() {
@@ -268,7 +253,7 @@ async function startRender(event) {
       throw new Error(data.detail || "Render could not start.");
     }
     statusTitle.textContent = "Queued";
-    setMessage(`Estimated ${data.estimated_map_requests} Google map requests.`);
+    setMessage(`Up to ${data.estimated_map_requests} Google Static Map images will be used.`);
     pollJob(data.id);
   } catch (error) {
     statusTitle.textContent = "Ready";

@@ -49,7 +49,7 @@ Equivalent manual command:
 PYTHONPATH=src uvicorn gpx_route_generator.app:app --reload --reload-dir src
 ```
 
-Frame generation fetches and composes up to 4 frames concurrently by default. Tune with `FRAME_WORKERS` if you want to trade speed for Google Maps request burstiness:
+The renderer fetches a small set of reusable Google Static Map source images before composing frames. Tune `FRAME_WORKERS` to bound both source-image prefetching and concurrent frame composition:
 
 ```bash
 FRAME_WORKERS=6 ./scripts/dev.sh
@@ -114,6 +114,8 @@ For production, put Nginx or Caddy in front of the container for HTTPS and proxy
 ## Notes
 
 - V1 is local-only and stores render outputs under `data/jobs/`.
-- Each rendered frame requests a Google Static Maps image. The UI estimates request count before rendering.
-- The renderer automatically chooses a dynamic local zoom around the moving position, keeping nearby route context visible without falling back to a whole-country overview for long drives.
+- Each render automatically plans and temporarily caches up to 12 high-resolution Google Static Map images in memory. Every video frame crops from one cached source image, reducing map requests from one per frame to a small bounded set.
+- Output stays north-up 2D because Google Maps Static API does not provide pitched or 3D camera images.
+- The renderer targets zoom level 14, matching the horizontal scale in supplied reference. Very long routes widen only enough to remain within 12 source images.
+- The renderer automatically follows the moving position while keeping nearby route context visible.
 - The driving avatar is a top-down motorcycle icon (`mt15.png`) that rotates to match the route bearing.

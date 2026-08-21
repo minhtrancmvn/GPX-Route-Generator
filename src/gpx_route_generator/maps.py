@@ -4,12 +4,25 @@ import base64
 import hashlib
 import hmac
 from io import BytesIO
+from typing import Protocol
 from urllib.parse import urlencode, urlsplit
 
 from PIL import Image
 import requests
 
 from .models import RenderOptions
+
+
+class StaticMapClient(Protocol):
+    def fetch(
+        self,
+        center_lat: float,
+        center_lon: float,
+        options: RenderOptions,
+        *,
+        zoom: int | None = None,
+        static_size: tuple[int, int] | None = None,
+    ) -> bytes: ...
 
 
 class GoogleStaticMapClient:
@@ -20,11 +33,19 @@ class GoogleStaticMapClient:
         self.signature_secret = signature_secret
         self.session = requests.Session()
 
-    def fetch(self, center_lat: float, center_lon: float, options: RenderOptions) -> bytes:
-        size_w, size_h = options.static_size
+    def fetch(
+        self,
+        center_lat: float,
+        center_lon: float,
+        options: RenderOptions,
+        *,
+        zoom: int | None = None,
+        static_size: tuple[int, int] | None = None,
+    ) -> bytes:
+        size_w, size_h = static_size or options.static_size
         params = {
             "center": f"{center_lat:.7f},{center_lon:.7f}",
-            "zoom": str(options.zoom),
+            "zoom": str(zoom if zoom is not None else options.zoom),
             "size": f"{size_w}x{size_h}",
             "scale": str(options.scale),
             "maptype": options.map_type,
@@ -55,9 +76,18 @@ class SolidColorMapClient:
         self.color = color
         self.requests = 0
 
-    def fetch(self, center_lat: float, center_lon: float, options: RenderOptions) -> bytes:
+    def fetch(
+        self,
+        center_lat: float,
+        center_lon: float,
+        options: RenderOptions,
+        *,
+        zoom: int | None = None,
+        static_size: tuple[int, int] | None = None,
+    ) -> bytes:
         self.requests += 1
-        image = Image.new("RGB", (options.width, options.height), self.color)
+        size_w, size_h = static_size or options.static_size
+        image = Image.new("RGB", (size_w * options.scale, size_h * options.scale), self.color)
         buffer = BytesIO()
         image.save(buffer, format="PNG")
         return buffer.getvalue()

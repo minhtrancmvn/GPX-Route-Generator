@@ -24,6 +24,7 @@ FORMAT_STATIC_SIZES: dict[OutputFormat, tuple[int, int]] = {
 
 
 VALID_MAP_TYPES = {"roadmap", "satellite", "terrain", "hybrid"}
+MAX_CACHED_MAP_REQUESTS = 12
 AVAILABLE_AVATARS = {
     "default": "Default",
     "mt15": "MT-15",
@@ -43,7 +44,7 @@ class RenderOptions:
     output_format: OutputFormat = OutputFormat.LANDSCAPE
     duration_seconds: float = 10.0
     fps: int = 24
-    zoom: int = 18
+    zoom: int = 14
     map_type: str = "roadmap"
     trail_color: str = "#ff2f2f"
     trail_width: int = 6
@@ -76,7 +77,7 @@ class RenderOptions:
 
     @property
     def estimated_map_requests(self) -> int:
-        return self.frame_count
+        return MAX_CACHED_MAP_REQUESTS
 
 
 def validate_render_options(options: RenderOptions) -> None:

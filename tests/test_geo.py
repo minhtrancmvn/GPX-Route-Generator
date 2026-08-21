@@ -138,7 +138,7 @@ def test_dynamic_route_window_short_trip_long_duration_zooms_in() -> None:
     assert dynamic_route_window_meters(20_000, duration_seconds=10) == pytest.approx(5_000)
 
 
-def test_dynamic_camera_zooms_closer_than_full_route_for_long_drive() -> None:
+def test_dynamic_camera_keeps_requested_target_zoom_for_long_drive() -> None:
     coarse_points = [
         RoutePoint(10.776, 106.700),
         RoutePoint(10.930, 107.080),
@@ -147,20 +147,21 @@ def test_dynamic_camera_zooms_closer_than_full_route_for_long_drive() -> None:
         RoutePoint(13.750, 109.210),
     ]
     samples, distances = resample_by_distance(coarse_points, 120)
-    full_route_zoom = fit_overview_zoom(samples, max_zoom=18, width=720, height=1280, scale=2)
     states = dynamic_camera_states(
         samples,
         distances,
         width=720,
         height=1280,
         scale=2,
-        max_zoom=18,
+        max_zoom=14,
         duration_seconds=10,
         fps=24,
     )
-    assert full_route_zoom <= 7
-    assert min(state.zoom for state in states) > full_route_zoom
-    assert min(state.zoom for state in states) >= 9
+    assert {state.zoom for state in states} == {14}
+
+
+def test_default_zoom_matches_reference_scale() -> None:
+    assert RenderOptions().zoom == 14
 
 
 def test_duration_validation_is_five_to_thirty_seconds() -> None:
