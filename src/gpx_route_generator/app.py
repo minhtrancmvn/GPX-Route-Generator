@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import math
+import sys
 from collections.abc import Callable
 from io import BytesIO
 from pathlib import Path
@@ -43,6 +44,16 @@ MapClientFactory = Callable[[Settings], StaticMapClient]
 
 class UploadTooLargeError(ValueError):
     pass
+
+
+def _log_sanitized_exception(message: str, **extra: object) -> None:
+    _, _, traceback = sys.exc_info()
+    sanitized_exception = RuntimeError("Sensitive details redacted.")
+    logger.exception(
+        message,
+        exc_info=(RuntimeError, sanitized_exception, traceback),
+        extra=extra or None,
+    )
 
 
 async def _read_upload(upload: UploadFile, *, max_bytes: int) -> bytes:
@@ -191,7 +202,9 @@ def create_app(
         try:
             score = float(payload["score"])
             if not math.isfinite(score) or not 0 <= score <= 1:
-                raise ValueError("reCAPTCHA score must be finite and between zero and one.")
+                raise ValueError(
+                    "reCAPTCHA score must be finite and between zero and one."
+                )
         except (ValueError, TypeError, KeyError) as exc:
             raise HTTPException(
                 status_code=502,
@@ -283,7 +296,7 @@ def create_app(
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
         except Exception:
-            logger.exception("Preview render failed")
+            _log_sanitized_exception("Preview render failed")
             raise HTTPException(
                 status_code=500,
                 detail="Preview could not be generated. Please try again.",
@@ -423,7 +436,7 @@ def run_render_job(app: FastAPI, job_id: str, points, options: RenderOptions) ->
             progress_frames=options.frame_count,
         )
     except Exception:
-        logger.exception("Render job failed", extra={"job_id": job_id})
+        _log_sanitized_exception("Render job failed", job_id=job_id)
         app.state.jobs.update(
             job_id, status="failed", error="Render failed. Please try again."
         )

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import shutil
 from dataclasses import replace
 from pathlib import Path
@@ -207,53 +208,73 @@ def test_avatar_preview_loads_without_google_api_key(tmp_path: Path) -> None:
 def test_preview_hides_provider_exception_details(
     tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
+    provider_url = "https://maps.example.com/?key=secret-google-key"
+
     class FailingMapClient:
         def fetch(self, *args, **kwargs) -> bytes:
-            raise requests.HTTPError("https://maps.example.com/?key=secret-google-key")
+            raise requests.HTTPError(provider_url)
 
     app = create_app(
         settings=make_settings(tmp_path),
         map_client_factory=lambda settings: FailingMapClient(),
     )
-    response = TestClient(app).post(
-        "/api/preview",
-        data={"duration_seconds": "5", "fps": "1"},
-        files={"gpx_file": ("route.gpx", VALID_GPX, "application/gpx+xml")},
-    )
+    with caplog.at_level(logging.ERROR):
+        response = TestClient(app).post(
+            "/api/preview",
+            data={"duration_seconds": "5", "fps": "1"},
+            files={"gpx_file": ("route.gpx", VALID_GPX, "application/gpx+xml")},
+        )
     assert response.status_code == 500
     assert "secret-google-key" not in response.text
     assert "http" not in response.text
     assert "Preview could not be generated" in response.text
+
     assert any(
         record.message == "Preview render failed" and record.exc_info is not None
         for record in caplog.records
     )
+    assert "Traceback" in caplog.text
+    assert "Sensitive details redacted." in caplog.text
+    assert "secret-google-key" not in caplog.text
+    assert "maps.example.com" not in caplog.text
+    assert str(tmp_path) not in caplog.text
 
 
 def test_render_job_hides_provider_exception_details(
     tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
+    provider_url = "https://maps.example.com/?key=secret-google-key"
+
     class FailingMapClient:
         def fetch(self, *args, **kwargs) -> bytes:
-            raise requests.HTTPError("https://maps.example.com/?key=secret-google-key")
+            raise requests.HTTPError(provider_url)
 
     app = create_app(
         settings=make_settings(tmp_path),
         map_client_factory=lambda settings: FailingMapClient(),
     )
-    response = post_render(TestClient(app))
+    with caplog.at_level(logging.ERROR):
+        response = post_render(TestClient(app))
+        status = TestClient(app).get(f"/api/jobs/{response.json()['id']}")
 
     assert response.status_code == 202
-    status = TestClient(app).get(f"/api/jobs/{response.json()['id']}")
     assert status.status_code == 200
     assert status.json()["status"] == "failed"
     assert "secret-google-key" not in status.text
     assert "http" not in status.text
     assert status.json()["error"] == "Render failed. Please try again."
+
     assert any(
-        record.message == "Render job failed" and record.exc_info is not None
+        record.message == "Render job failed"
+        and record.exc_info is not None
+        and getattr(record, "job_id", None) == response.json()["id"]
         for record in caplog.records
     )
+    assert "Traceback" in caplog.text
+    assert "Sensitive details redacted." in caplog.text
+    assert "secret-google-key" not in caplog.text
+    assert "maps.example.com" not in caplog.text
+    assert str(tmp_path) not in caplog.text
 
 
 def test_preview_frame_uses_single_map_request(tmp_path: Path) -> None:
