@@ -224,7 +224,36 @@ def test_preview_hides_provider_exception_details(
     assert "secret-google-key" not in response.text
     assert "http" not in response.text
     assert "Preview could not be generated" in response.text
-    assert "Preview render failed" in caplog.text
+    assert any(
+        record.message == "Preview render failed" and record.exc_info is not None
+        for record in caplog.records
+    )
+
+
+def test_render_job_hides_provider_exception_details(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    class FailingMapClient:
+        def fetch(self, *args, **kwargs) -> bytes:
+            raise requests.HTTPError("https://maps.example.com/?key=secret-google-key")
+
+    app = create_app(
+        settings=make_settings(tmp_path),
+        map_client_factory=lambda settings: FailingMapClient(),
+    )
+    response = post_render(TestClient(app))
+
+    assert response.status_code == 202
+    status = TestClient(app).get(f"/api/jobs/{response.json()['id']}")
+    assert status.status_code == 200
+    assert status.json()["status"] == "failed"
+    assert "secret-google-key" not in status.text
+    assert "http" not in status.text
+    assert status.json()["error"] == "Render failed. Please try again."
+    assert any(
+        record.message == "Render job failed" and record.exc_info is not None
+        for record in caplog.records
+    )
 
 
 def test_preview_frame_uses_single_map_request(tmp_path: Path) -> None:
@@ -373,6 +402,10 @@ def test_render_rejects_low_recaptcha_score_in_production(
         pytest.param(ValueError("not json"), id="invalid-json"),
         pytest.param(["not", "a", "dict"], id="non-dict-json"),
         pytest.param({"success": True, "score": "not-a-number"}, id="nonnumeric-score"),
+        pytest.param({"success": "true", "score": 0.9}, id="non-boolean-success"),
+        pytest.param({"success": True, "score": "nan"}, id="nan-score"),
+        pytest.param({"success": True, "score": "inf"}, id="infinite-score"),
+        pytest.param({"success": True, "score": 1.1}, id="score-above-one"),
     ],
 )
 def test_render_rejects_malformed_recaptcha_provider_response(

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import math
 from collections.abc import Callable
 from io import BytesIO
 from pathlib import Path
@@ -174,6 +175,8 @@ def create_app(
             if not isinstance(payload, dict):
                 raise TypeError("reCAPTCHA response must be a JSON object.")
             success = payload["success"]
+            if not isinstance(success, bool):
+                raise TypeError("reCAPTCHA success must be a boolean.")
         except (requests.RequestException, ValueError, TypeError, KeyError) as exc:
             raise HTTPException(
                 status_code=502,
@@ -187,6 +190,8 @@ def create_app(
             )
         try:
             score = float(payload["score"])
+            if not math.isfinite(score) or not 0 <= score <= 1:
+                raise ValueError("reCAPTCHA score must be finite and between zero and one.")
         except (ValueError, TypeError, KeyError) as exc:
             raise HTTPException(
                 status_code=502,
@@ -278,7 +283,7 @@ def create_app(
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
         except Exception:
-            logger.error("Preview render failed")
+            logger.exception("Preview render failed")
             raise HTTPException(
                 status_code=500,
                 detail="Preview could not be generated. Please try again.",
@@ -418,7 +423,7 @@ def run_render_job(app: FastAPI, job_id: str, points, options: RenderOptions) ->
             progress_frames=options.frame_count,
         )
     except Exception:
-        logger.error("Render job failed", extra={"job_id": job_id})
+        logger.exception("Render job failed", extra={"job_id": job_id})
         app.state.jobs.update(
             job_id, status="failed", error="Render failed. Please try again."
         )
