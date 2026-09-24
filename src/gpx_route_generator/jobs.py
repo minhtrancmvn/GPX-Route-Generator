@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, field
-from datetime import datetime, timezone
+from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from pathlib import Path
 from threading import Lock
 
@@ -16,8 +16,8 @@ class RenderJob:
     progress_frames: int = 0
     actual_map_requests: int = 0
     error: str | None = None
-    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
-    updated_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+    updated_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
     @property
     def progress(self) -> float:
@@ -26,13 +26,21 @@ class RenderJob:
         return min(1.0, self.progress_frames / self.total_frames)
 
     def to_dict(self) -> dict[str, object]:
-        data = asdict(self)
-        data["output_path"] = str(self.output_path)
-        data["created_at"] = self.created_at.isoformat()
-        data["updated_at"] = self.updated_at.isoformat()
-        data["progress"] = self.progress
-        data["download_url"] = f"/api/jobs/{self.id}/video" if self.status == "completed" else None
-        return data
+        return {
+            "id": self.id,
+            "status": self.status,
+            "estimated_map_requests": self.estimated_map_requests,
+            "total_frames": self.total_frames,
+            "progress_frames": self.progress_frames,
+            "actual_map_requests": self.actual_map_requests,
+            "error": self.error,
+            "created_at": self.created_at.isoformat(),
+            "updated_at": self.updated_at.isoformat(),
+            "progress": self.progress,
+            "download_url": f"/api/jobs/{self.id}/video"
+            if self.status == "completed"
+            else None,
+        }
 
 
 class JobStore:
@@ -55,6 +63,5 @@ class JobStore:
                 return None
             for key, value in changes.items():
                 setattr(job, key, value)
-            job.updated_at = datetime.now(timezone.utc)
+            job.updated_at = datetime.now(UTC)
             return job
-

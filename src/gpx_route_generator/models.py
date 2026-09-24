@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
@@ -8,7 +9,6 @@ from enum import Enum
 class OutputFormat(str, Enum):
     LANDSCAPE = "landscape"
     PORTRAIT = "portrait"
-
 
 
 FORMAT_DIMENSIONS: dict[OutputFormat, tuple[int, int]] = {
@@ -89,6 +89,8 @@ def validate_render_options(options: RenderOptions) -> None:
         raise ValueError("Zoom must be between 1 and 21.")
     if options.map_type not in VALID_MAP_TYPES:
         raise ValueError("Map type must be roadmap, satellite, terrain, or hybrid.")
+    if re.fullmatch(r"#[0-9a-fA-F]{6}", options.trail_color) is None:
+        raise ValueError("Trail color must be a six-digit hex color such as #ff2f2f.")
     if not 1 <= options.trail_width <= 24:
         raise ValueError("Trail width must be between 1 and 24 pixels.")
     if not 16 <= options.arrow_size <= 160:
