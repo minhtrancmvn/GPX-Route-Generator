@@ -2,12 +2,15 @@ services:
   app:
     build: .
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     env_file:
       - .env
     environment:
       PORT: 8000
-      FRAME_WORKERS: 4
+      FRAME_WORKERS: ${FRAME_WORKERS:-4}
+      MAX_UPLOAD_BYTES: ${MAX_UPLOAD_BYTES:-5242880}
+      MAX_ROUTE_POINTS: ${MAX_ROUTE_POINTS:-50000}
+      ALLOW_UNPROTECTED_RENDERING: ${ALLOW_UNPROTECTED_RENDERING:-false}
     volumes:
       - ./data:/app/data
     restart: unless-stopped
