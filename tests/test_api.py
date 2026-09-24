@@ -10,6 +10,7 @@ from fastapi.testclient import TestClient
 
 from gpx_route_generator.app import create_app
 from gpx_route_generator.config import Settings
+from gpx_route_generator.jobs import RenderJob
 from gpx_route_generator.maps import SolidColorMapClient
 
 VALID_GPX = """<?xml version="1.0" encoding="UTF-8"?>
@@ -111,6 +112,52 @@ def test_create_app_allows_explicit_unprotected_production(tmp_path: Path) -> No
     assert create_app(settings=settings).state.settings is settings
 
 
+def test_job_payload_hides_output_path(tmp_path: Path) -> None:
+    app = create_app(
+        settings=make_settings(tmp_path),
+        map_client_factory=lambda settings: SolidColorMapClient(),
+    )
+    response = post_render(TestClient(app))
+    assert response.status_code == 202
+    payload = response.json()
+    assert "output_path" not in payload
+    assert payload["download_url"] is None
+
+
+def test_failed_job_video_is_terminal_error(tmp_path: Path) -> None:
+    app = create_app(settings=make_settings(tmp_path))
+    job = RenderJob(
+        id="failed",
+        status="failed",
+        output_path=tmp_path / "secret" / "route.mp4",
+        estimated_map_requests=1,
+        total_frames=1,
+        error="Render failed.",
+    )
+    app.state.jobs.add(job)
+    response = TestClient(app).get("/api/jobs/failed/video")
+    assert response.status_code == 500
+    assert response.json()["detail"] == "Render failed."
+
+
+def test_failed_job_payload_hides_internal_error_details(tmp_path: Path) -> None:
+    app = create_app(settings=make_settings(tmp_path))
+    job = RenderJob(
+        id="failed",
+        status="failed",
+        output_path=tmp_path / "secret" / "route.mp4",
+        estimated_map_requests=1,
+        total_frames=1,
+        error="Render failed. Please try again.",
+    )
+    app.state.jobs.add(job)
+    response = TestClient(app).get("/api/jobs/failed")
+    assert response.status_code == 200
+    assert "/app/" not in response.text
+    assert "output_path" not in response.text
+    assert "secret-google-key" not in response.text
+
+
 def test_render_requires_google_api_key(tmp_path: Path) -> None:
     app = create_app(settings=make_settings(tmp_path, api_key=None))
     client = TestClient(app)
@@ -129,6 +176,7 @@ def test_index_page_loads(tmp_path: Path) -> None:
     assert "3D globe" not in response.text
     assert "Time" not in response.text
     assert "recaptcha/api.js" not in response.text
+
 
 def test_index_page_loads_recaptcha_in_production(tmp_path: Path) -> None:
     settings = Settings(
@@ -155,9 +203,35 @@ def test_avatar_preview_loads_without_google_api_key(tmp_path: Path) -> None:
     assert response.headers["content-type"] == "image/png"
     assert response.content.startswith(b"\x89PNG")
 
+
+def test_preview_hides_provider_exception_details(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    class FailingMapClient:
+        def fetch(self, *args, **kwargs) -> bytes:
+            raise requests.HTTPError("https://maps.example.com/?key=secret-google-key")
+
+    app = create_app(
+        settings=make_settings(tmp_path),
+        map_client_factory=lambda settings: FailingMapClient(),
+    )
+    response = TestClient(app).post(
+        "/api/preview",
+        data={"duration_seconds": "5", "fps": "1"},
+        files={"gpx_file": ("route.gpx", VALID_GPX, "application/gpx+xml")},
+    )
+    assert response.status_code == 500
+    assert "secret-google-key" not in response.text
+    assert "http" not in response.text
+    assert "Preview could not be generated" in response.text
+    assert "Preview render failed" in caplog.text
+
+
 def test_preview_frame_uses_single_map_request(tmp_path: Path) -> None:
     map_client = SolidColorMapClient()
-    app = create_app(settings=make_settings(tmp_path), map_client_factory=lambda settings: map_client)
+    app = create_app(
+        settings=make_settings(tmp_path), map_client_factory=lambda settings: map_client
+    )
     client = TestClient(app)
     response = client.post(
         "/api/preview",
@@ -193,6 +267,16 @@ def test_render_validates_duration(tmp_path: Path) -> None:
     assert "Duration" in response.json()["detail"]
 
 
+def test_render_rejects_invalid_trail_color(tmp_path: Path) -> None:
+    app = create_app(settings=make_settings(tmp_path))
+    response = post_render(TestClient(app), trail_color="not-a-color")
+    assert response.status_code == 422
+    assert (
+        response.json()["detail"]
+        == "Trail color must be a six-digit hex color such as #ff2f2f."
+    )
+
+
 def test_render_validates_avatar(tmp_path: Path) -> None:
     app = create_app(settings=make_settings(tmp_path))
     client = TestClient(app)
@@ -217,7 +301,10 @@ def test_render_requires_recaptcha_in_production(tmp_path: Path) -> None:
     assert response.status_code == 400
     assert "reCAPTCHA verification is required" in response.json()["detail"]
 
-def test_render_accepts_valid_recaptcha_in_production(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+
+def test_render_accepts_valid_recaptcha_in_production(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     settings = Settings(
         google_maps_api_key="test-key",
         google_maps_signature_secret=None,
@@ -229,7 +316,10 @@ def test_render_accepts_valid_recaptcha_in_production(tmp_path: Path, monkeypatc
     )
 
     class MockResponse:
-        def json(self):
+        def raise_for_status(self) -> None:
+            return None
+
+        def json(self) -> dict[str, float | bool]:
             return {"success": True, "score": 0.9}
 
     def fake_post(*args, **kwargs):
@@ -241,9 +331,12 @@ def test_render_accepts_valid_recaptcha_in_production(tmp_path: Path, monkeypatc
     app = create_app(settings=settings, map_client_factory=lambda settings: map_client)
     client = TestClient(app)
     response = post_render(client, recaptcha_token="token")
-    assert response.status_code == 200
+    assert response.status_code == 202
 
-def test_render_rejects_low_recaptcha_score_in_production(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+
+def test_render_rejects_low_recaptcha_score_in_production(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     settings = Settings(
         google_maps_api_key="test-key",
         google_maps_signature_secret=None,
@@ -255,7 +348,10 @@ def test_render_rejects_low_recaptcha_score_in_production(tmp_path: Path, monkey
     )
 
     class MockResponse:
-        def json(self):
+        def raise_for_status(self) -> None:
+            return None
+
+        def json(self) -> dict[str, float | bool]:
             return {"success": True, "score": 0.4}
 
     def fake_post(*args, **kwargs):
@@ -270,15 +366,61 @@ def test_render_rejects_low_recaptcha_score_in_production(tmp_path: Path, monkey
     assert "reCAPTCHA score is too low" in response.json()["detail"]
 
 
+@pytest.mark.parametrize(
+    "response",
+    [
+        pytest.param(requests.HTTPError("provider unavailable"), id="http-error"),
+        pytest.param(ValueError("not json"), id="invalid-json"),
+        pytest.param(["not", "a", "dict"], id="non-dict-json"),
+        pytest.param({"success": True, "score": "not-a-number"}, id="nonnumeric-score"),
+    ],
+)
+def test_render_rejects_malformed_recaptcha_provider_response(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    response: object,
+) -> None:
+    settings = Settings(
+        google_maps_api_key="test-key",
+        google_maps_signature_secret=None,
+        environment="production",
+        recaptcha_site_key="site-key",
+        recaptcha_secret_key="secret-key",
+        jobs_dir=tmp_path / "jobs",
+        ffmpeg_path="ffmpeg",
+    )
+
+    class MockResponse:
+        def raise_for_status(self) -> None:
+            if isinstance(response, requests.HTTPError):
+                raise response
+
+        def json(self) -> object:
+            if isinstance(response, ValueError):
+                raise response
+            return response
+
+    monkeypatch.setattr(requests, "post", lambda *args, **kwargs: MockResponse())
+
+    app = create_app(settings=settings)
+    result = post_render(TestClient(app), recaptcha_token="token")
+    assert result.status_code == 502
+    assert (
+        result.json()["detail"] == "reCAPTCHA verification is temporarily unavailable."
+    )
+
+
 @pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="ffmpeg is not installed")
 def test_render_job_completes_with_mocked_maps(tmp_path: Path) -> None:
     map_client = SolidColorMapClient()
-    app = create_app(settings=make_settings(tmp_path), map_client_factory=lambda settings: map_client)
+    app = create_app(
+        settings=make_settings(tmp_path), map_client_factory=lambda settings: map_client
+    )
     client = TestClient(app)
 
     response = post_render(client)
 
-    assert response.status_code == 200
+    assert response.status_code == 202
     job_id = response.json()["id"]
     status = client.get(f"/api/jobs/{job_id}")
     assert status.status_code == 200

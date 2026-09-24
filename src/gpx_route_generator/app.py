@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable
 from io import BytesIO
 from pathlib import Path
@@ -15,7 +16,7 @@ from fastapi import (
     Request,
     UploadFile,
 )
-from fastapi.responses import FileResponse, Response
+from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
@@ -34,6 +35,7 @@ from .renderer import make_arrow, render_route_video
 
 RECAPTCHA_MIN_SCORE = 0.5
 RECAPTCHA_VERIFY_URL = "https://www.google.com/recaptcha/api/siteverify"
+logger = logging.getLogger(__name__)
 
 MapClientFactory = Callable[[Settings], StaticMapClient]
 
@@ -104,7 +106,9 @@ def create_app(
     app = FastAPI(title="GPX Route Generator")
     package_dir = Path(__file__).resolve().parent
     templates = Jinja2Templates(directory=str(package_dir / "templates"))
-    app.mount("/static", StaticFiles(directory=str(package_dir / "static")), name="static")
+    app.mount(
+        "/static", StaticFiles(directory=str(package_dir / "static")), name="static"
+    )
     app.state.settings = settings or load_settings()
     validate_settings(app.state.settings)
     app.state.jobs = JobStore()
@@ -141,7 +145,9 @@ def create_app(
             "has_google_maps_key": bool(app.state.settings.google_maps_api_key),
             "avatars": AVAILABLE_AVATARS,
             "recaptcha_enabled": app.state.settings.recaptcha_enabled,
-            "recaptcha_site_key": app.state.settings.recaptcha_site_key if app.state.settings.recaptcha_enabled else None,
+            "recaptcha_site_key": app.state.settings.recaptcha_site_key
+            if app.state.settings.recaptcha_enabled
+            else None,
         }
 
     def verify_recaptcha(token: str | None, remote_ip: str | None) -> None:
@@ -149,7 +155,9 @@ def create_app(
         if not settings.recaptcha_enabled:
             return
         if not token:
-            raise HTTPException(status_code=400, detail="reCAPTCHA verification is required.")
+            raise HTTPException(
+                status_code=400, detail="reCAPTCHA verification is required."
+            )
 
         try:
             response = requests.post(
@@ -161,23 +169,48 @@ def create_app(
                 },
                 timeout=10,
             )
+            response.raise_for_status()
             payload = response.json()
-        except requests.RequestException as exc:
-            raise HTTPException(status_code=502, detail="reCAPTCHA verification failed. Please try again.") from exc
+            if not isinstance(payload, dict):
+                raise TypeError("reCAPTCHA response must be a JSON object.")
+            success = payload["success"]
+        except (requests.RequestException, ValueError, TypeError, KeyError) as exc:
+            raise HTTPException(
+                status_code=502,
+                detail="reCAPTCHA verification is temporarily unavailable.",
+            ) from exc
 
-        if not payload.get("success"):
-            raise HTTPException(status_code=400, detail="reCAPTCHA verification failed. Please try again.")
-        score = payload.get("score")
-        if score is None or float(score) < RECAPTCHA_MIN_SCORE:
-            raise HTTPException(status_code=403, detail="reCAPTCHA score is too low. Rendering is blocked.")
+        if not success:
+            raise HTTPException(
+                status_code=400,
+                detail="reCAPTCHA verification failed. Please try again.",
+            )
+        try:
+            score = float(payload["score"])
+        except (ValueError, TypeError, KeyError) as exc:
+            raise HTTPException(
+                status_code=502,
+                detail="reCAPTCHA verification is temporarily unavailable.",
+            ) from exc
+        if score < RECAPTCHA_MIN_SCORE:
+            raise HTTPException(
+                status_code=403,
+                detail="reCAPTCHA score is too low. Rendering is blocked.",
+            )
 
     @app.post("/api/gpx/parse")
     async def parse_gpx_endpoint(gpx_file: UploadFile = File(...)):
         try:
-            data = await _read_upload(gpx_file, max_bytes=app.state.settings.max_upload_bytes)
-            points = parse_gpx_bytes(data, max_points=app.state.settings.max_route_points)
+            data = await _read_upload(
+                gpx_file, max_bytes=app.state.settings.max_upload_bytes
+            )
+            points = parse_gpx_bytes(
+                data, max_points=app.state.settings.max_route_points
+            )
         except UploadTooLargeError as exc:
-            raise HTTPException(status_code=413, detail="GPX upload is too large.") from exc
+            raise HTTPException(
+                status_code=413, detail="GPX upload is too large."
+            ) from exc
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
         return {
@@ -210,7 +243,10 @@ def create_app(
         show_elevation: bool = Form(True),
     ):
         if not app.state.settings.google_maps_api_key:
-            raise HTTPException(status_code=400, detail="Set GOOGLE_MAPS_API_KEY in .env before preview.")
+            raise HTTPException(
+                status_code=400,
+                detail="Set GOOGLE_MAPS_API_KEY in .env before preview.",
+            )
         try:
             options = _build_options(
                 output_format=output_format,
@@ -227,16 +263,26 @@ def create_app(
                 show_speed=show_speed,
                 show_elevation=show_elevation,
             )
-            data = await _read_upload(gpx_file, max_bytes=app.state.settings.max_upload_bytes)
-            points = parse_gpx_bytes(data, max_points=app.state.settings.max_route_points)
+            data = await _read_upload(
+                gpx_file, max_bytes=app.state.settings.max_upload_bytes
+            )
+            points = parse_gpx_bytes(
+                data, max_points=app.state.settings.max_route_points
+            )
             map_client = app.state.map_client_factory(app.state.settings)
             image = render_preview_frame_2d(points, options, map_client)
         except UploadTooLargeError as exc:
-            raise HTTPException(status_code=413, detail="GPX upload is too large.") from exc
+            raise HTTPException(
+                status_code=413, detail="GPX upload is too large."
+            ) from exc
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
-        except Exception as exc:
-            raise HTTPException(status_code=500, detail=f"Preview failed: {exc}") from exc
+        except Exception:
+            logger.error("Preview render failed")
+            raise HTTPException(
+                status_code=500,
+                detail="Preview could not be generated. Please try again.",
+            ) from None
 
         buffer = BytesIO()
         image.save(buffer, format="PNG")
@@ -263,8 +309,13 @@ def create_app(
         recaptcha_token: str | None = Form(None),
     ):
         if not app.state.settings.google_maps_api_key:
-            raise HTTPException(status_code=400, detail="Set GOOGLE_MAPS_API_KEY in .env before rendering.")
-        verify_recaptcha(recaptcha_token, request.client.host if request.client else None)
+            raise HTTPException(
+                status_code=400,
+                detail="Set GOOGLE_MAPS_API_KEY in .env before rendering.",
+            )
+        verify_recaptcha(
+            recaptcha_token, request.client.host if request.client else None
+        )
         try:
             options = _build_options(
                 output_format=output_format,
@@ -285,10 +336,16 @@ def create_app(
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
         try:
-            data = await _read_upload(gpx_file, max_bytes=app.state.settings.max_upload_bytes)
-            points = parse_gpx_bytes(data, max_points=app.state.settings.max_route_points)
+            data = await _read_upload(
+                gpx_file, max_bytes=app.state.settings.max_upload_bytes
+            )
+            points = parse_gpx_bytes(
+                data, max_points=app.state.settings.max_route_points
+            )
         except UploadTooLargeError as exc:
-            raise HTTPException(status_code=413, detail="GPX upload is too large.") from exc
+            raise HTTPException(
+                status_code=413, detail="GPX upload is too large."
+            ) from exc
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
@@ -303,7 +360,7 @@ def create_app(
         )
         app.state.jobs.add(job)
         background_tasks.add_task(run_render_job, app, job_id, points, options)
-        return job.to_dict()
+        return JSONResponse(status_code=202, content=job.to_dict())
 
     @app.get("/api/jobs/{job_id}")
     async def job_status(job_id: str):
@@ -317,9 +374,15 @@ def create_app(
         job = app.state.jobs.get(job_id)
         if job is None:
             raise HTTPException(status_code=404, detail="Render job not found.")
+        if job.status == "failed":
+            raise HTTPException(status_code=500, detail=job.error or "Render failed.")
         if job.status != "completed" or not job.output_path.exists():
-            raise HTTPException(status_code=409, detail="Render video is not ready yet.")
-        return FileResponse(job.output_path, filename=f"gpx-route-{job_id}.mp4", media_type="video/mp4")
+            raise HTTPException(
+                status_code=409, detail="Render video is not ready yet."
+            )
+        return FileResponse(
+            job.output_path, filename=f"gpx-route-{job_id}.mp4", media_type="video/mp4"
+        )
 
     return app
 
@@ -328,6 +391,7 @@ def run_render_job(app: FastAPI, job_id: str, points, options: RenderOptions) ->
     settings: Settings = app.state.settings
     app.state.jobs.update(job_id, status="running")
     try:
+
         def update_progress(done: int, total: int, map_requests: int) -> None:
             app.state.jobs.update(
                 job_id,
@@ -353,8 +417,11 @@ def run_render_job(app: FastAPI, job_id: str, points, options: RenderOptions) ->
             status="completed",
             progress_frames=options.frame_count,
         )
-    except Exception as exc:
-        app.state.jobs.update(job_id, status="failed", error=str(exc))
+    except Exception:
+        logger.error("Render job failed", extra={"job_id": job_id})
+        app.state.jobs.update(
+            job_id, status="failed", error="Render failed. Please try again."
+        )
 
 
 app = create_app()
