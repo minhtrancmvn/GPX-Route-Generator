@@ -84,7 +84,7 @@ cp .env.example .env
 docker compose up --build
 ```
 
-Open http://127.0.0.1:8000. Compose publishes the port on loopback only; put Nginx or Caddy in front of the container for any other access. Render outputs are persisted in the named `app-data` volume at `/app/data`, which the image creates with ownership for the non-root `appuser` (UID 10001), so renders can write to it without a privileged entrypoint. Inspect the volume with `docker compose exec app ls /app/data/jobs` or `docker volume inspect`, and back it up with `docker run --rm -v app-data:/data alpine tar -C /data -cf - .`.
+Open http://127.0.0.1:8000. Compose publishes the port on loopback only; put Nginx or Caddy in front of the container for any other access. Render outputs are persisted in the named `app-data` volume (`gpx-route-generator-data`) at `/app/data`, which the image creates with ownership for the non-root `appuser` (UID 10001), so renders can write to it without a privileged entrypoint. Inspect the volume with `docker compose exec app ls /app/data/jobs` or `docker volume inspect`, and back it up with `docker run --rm -v gpx-route-generator-data:/data alpine tar -C /data -cf - .`.
 
 Tune concurrent frame generation by overriding `FRAME_WORKERS`:
 
@@ -113,7 +113,7 @@ docker run --rm -p 127.0.0.1:8000:8000 --env-file .env -v gpx-app-data:/app/data
 docker compose up -d --build
 ```
 
-For production, put Nginx or Caddy in front of the container for HTTPS and proxy traffic to `127.0.0.1:8000`; Compose never publishes the port beyond loopback. Render outputs live in the `app-data` Docker volume on the Lightsail disk. Back it up with `docker run --rm -v app-data:/data alpine tar -C /data -cf - . > app-data-backup.tar`, or move completed MP4s to S3 later if you need durable external storage.
+For production, put Nginx or Caddy in front of the container for HTTPS and proxy traffic to `127.0.0.1:8000`; Compose never publishes the port beyond loopback. Render outputs live in the `app-data` Docker volume (`gpx-route-generator-data`) on the Lightsail disk. Back it up with `docker run --rm -v gpx-route-generator-data:/data alpine tar -C /data -cf - . > app-data-backup.tar`, or move completed MP4s to S3 later if you need durable external storage.
 
 ## Notes
 

@@ -17,3 +17,4 @@ services:
 
 volumes:
   app-data:
+    name: gpx-route-generator-data

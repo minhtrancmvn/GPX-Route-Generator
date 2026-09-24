@@ -24,7 +24,13 @@ def test_compose_uses_named_volume_for_render_data() -> None:
     compose = (ROOT / "docker-compose.yml").read_text()
     assert "app-data:/app/data" in compose
     assert "./data:/app/data" not in compose
-    assert "\nvolumes:\n  app-data:\n" in compose
+    assert "\nvolumes:\n  app-data:\n    name: gpx-route-generator-data\n" in compose
+
+
+def test_readme_backup_commands_use_explicit_compose_volume_name() -> None:
+    readme = (ROOT / "README.md").read_text()
+    assert "-v gpx-route-generator-data:/data" in readme
+    assert "-v app-data:/data" not in readme
 
 
 def test_env_documents_limits_and_override() -> None:
