@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-from pathlib import Path
 import shutil
+from dataclasses import replace
+from pathlib import Path
 
 import pytest
-from fastapi.testclient import TestClient
 import requests
+from fastapi.testclient import TestClient
 
 from gpx_route_generator.app import create_app
 from gpx_route_generator.config import Settings
@@ -56,6 +57,58 @@ def post_render(client: TestClient, **overrides):
         data=data,
         files={"gpx_file": ("route.gpx", VALID_GPX, "application/gpx+xml")},
     )
+
+
+def test_parse_rejects_oversized_upload(tmp_path: Path) -> None:
+    settings = replace(make_settings(tmp_path), max_upload_bytes=32)
+    client = TestClient(create_app(settings=settings))
+    response = client.post(
+        "/api/gpx/parse",
+        files={"gpx_file": ("route.gpx", VALID_GPX, "application/gpx+xml")},
+    )
+    assert response.status_code == 413
+    assert response.json()["detail"] == "GPX upload is too large."
+
+
+def test_parse_rejects_route_above_point_limit(tmp_path: Path) -> None:
+    settings = replace(make_settings(tmp_path), max_route_points=2)
+    route_above_limit = VALID_GPX.replace(
+        "  </trkseg></trk>",
+        '    <trkpt lat="37.0020" lon="-122.0012"><ele>14</ele></trkpt>\n  </trkseg></trk>',
+    )
+    client = TestClient(create_app(settings=settings))
+    response = client.post(
+        "/api/gpx/parse",
+        files={"gpx_file": ("route.gpx", route_above_limit, "application/gpx+xml")},
+    )
+    assert response.status_code == 422
+    assert "maximum" in response.json()["detail"]
+
+
+def test_parse_rejects_invalid_coordinates(tmp_path: Path) -> None:
+    invalid_gpx = VALID_GPX.replace('lat="37.0000"', 'lat="90.1"')
+    client = TestClient(create_app(settings=make_settings(tmp_path)))
+    response = client.post(
+        "/api/gpx/parse",
+        files={"gpx_file": ("route.gpx", invalid_gpx, "application/gpx+xml")},
+    )
+    assert response.status_code == 422
+    assert "coordinate" in response.json()["detail"]
+
+
+def test_create_app_rejects_unprotected_production(tmp_path: Path) -> None:
+    settings = replace(make_settings(tmp_path), environment="production")
+    with pytest.raises(ValueError, match="Production requires"):
+        create_app(settings=settings)
+
+
+def test_create_app_allows_explicit_unprotected_production(tmp_path: Path) -> None:
+    settings = replace(
+        make_settings(tmp_path),
+        environment="production",
+        allow_unprotected_rendering=True,
+    )
+    assert create_app(settings=settings).state.settings is settings
 
 
 def test_render_requires_google_api_key(tmp_path: Path) -> None:

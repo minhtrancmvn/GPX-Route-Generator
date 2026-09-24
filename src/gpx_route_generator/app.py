@@ -6,16 +6,29 @@ from pathlib import Path
 from uuid import uuid4
 
 import requests
-from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi import (
+    BackgroundTasks,
+    FastAPI,
+    File,
+    Form,
+    HTTPException,
+    Request,
+    UploadFile,
+)
 from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from .config import Settings, load_settings
+from .config import Settings, load_settings, validate_settings
 from .gpx import parse_gpx_bytes
 from .jobs import JobStore, RenderJob
 from .maps import GoogleStaticMapClient, StaticMapClient
-from .models import AVAILABLE_AVATARS, OutputFormat, RenderOptions, validate_render_options
+from .models import (
+    AVAILABLE_AVATARS,
+    OutputFormat,
+    RenderOptions,
+    validate_render_options,
+)
 from .preview import render_preview_frame_2d
 from .renderer import make_arrow, render_route_video
 
@@ -23,6 +36,21 @@ RECAPTCHA_MIN_SCORE = 0.5
 RECAPTCHA_VERIFY_URL = "https://www.google.com/recaptcha/api/siteverify"
 
 MapClientFactory = Callable[[Settings], StaticMapClient]
+
+
+class UploadTooLargeError(ValueError):
+    pass
+
+
+async def _read_upload(upload: UploadFile, *, max_bytes: int) -> bytes:
+    chunks: list[bytes] = []
+    total = 0
+    while chunk := await upload.read(64 * 1024):
+        total += len(chunk)
+        if total > max_bytes:
+            raise UploadTooLargeError(f"GPX upload exceeds the {max_bytes} byte limit.")
+        chunks.append(chunk)
+    return b"".join(chunks)
 
 
 def default_map_client_factory(settings: Settings) -> StaticMapClient:
@@ -78,6 +106,7 @@ def create_app(
     templates = Jinja2Templates(directory=str(package_dir / "templates"))
     app.mount("/static", StaticFiles(directory=str(package_dir / "static")), name="static")
     app.state.settings = settings or load_settings()
+    validate_settings(app.state.settings)
     app.state.jobs = JobStore()
     app.state.map_client_factory = map_client_factory
 
@@ -145,7 +174,10 @@ def create_app(
     @app.post("/api/gpx/parse")
     async def parse_gpx_endpoint(gpx_file: UploadFile = File(...)):
         try:
-            points = parse_gpx_bytes(await gpx_file.read())
+            data = await _read_upload(gpx_file, max_bytes=app.state.settings.max_upload_bytes)
+            points = parse_gpx_bytes(data, max_points=app.state.settings.max_route_points)
+        except UploadTooLargeError as exc:
+            raise HTTPException(status_code=413, detail="GPX upload is too large.") from exc
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
         return {
@@ -195,9 +227,12 @@ def create_app(
                 show_speed=show_speed,
                 show_elevation=show_elevation,
             )
-            points = parse_gpx_bytes(await gpx_file.read())
+            data = await _read_upload(gpx_file, max_bytes=app.state.settings.max_upload_bytes)
+            points = parse_gpx_bytes(data, max_points=app.state.settings.max_route_points)
             map_client = app.state.map_client_factory(app.state.settings)
             image = render_preview_frame_2d(points, options, map_client)
+        except UploadTooLargeError as exc:
+            raise HTTPException(status_code=413, detail="GPX upload is too large.") from exc
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
         except Exception as exc:
@@ -250,7 +285,10 @@ def create_app(
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
         try:
-            points = parse_gpx_bytes(await gpx_file.read())
+            data = await _read_upload(gpx_file, max_bytes=app.state.settings.max_upload_bytes)
+            points = parse_gpx_bytes(data, max_points=app.state.settings.max_route_points)
+        except UploadTooLargeError as exc:
+            raise HTTPException(status_code=413, detail="GPX upload is too large.") from exc
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
