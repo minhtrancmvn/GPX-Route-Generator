@@ -17,15 +17,17 @@ Add your Google Maps Static API key to `.env`:
 GOOGLE_MAPS_API_KEY=...
 ```
 
-Optional production-only reCAPTCHA v3 settings for the `Render MP4` button:
+Environment selection: keep `APP_ENV=local` for development only; reCAPTCHA stays hidden locally.
+
+Any deployment reachable by other people requires all three settings. Startup fails when `APP_ENV=production` is set without them:
 
 ```bash
-APP_ENV=local
+APP_ENV=production
 RECAPTCHA_SITE_KEY=...
 RECAPTCHA_SECRET_KEY=...
 ```
 
-Keep `APP_ENV=local` for development so reCAPTCHA stays hidden locally. Set `APP_ENV=production` on your deployed server to require a reCAPTCHA token before `/api/render` starts a job.
+`ALLOW_UNPROTECTED_RENDERING=true` is an explicit unsafe override that disables the production reCAPTCHA requirement. Use it only for a trusted single-operator host, never on a public deployment.
 
 `ffmpeg` is required for MP4 renders.
 
@@ -82,7 +84,7 @@ cp .env.example .env
 docker compose up --build
 ```
 
-Open http://127.0.0.1:8000. Render outputs are persisted to `./data/jobs` via the bind mount in `docker-compose.yml`.
+Open http://127.0.0.1:8000. Compose publishes the port on loopback only; put Nginx or Caddy in front of the container for any other access. Render outputs are persisted in the named `app-data` volume at `/app/data`, which the image creates with ownership for the non-root `appuser` (UID 10001), so renders can write to it without a privileged entrypoint. Inspect the volume with `docker compose exec app ls /app/data/jobs` or `docker volume inspect`, and back it up with `docker run --rm -v app-data:/data alpine tar -C /data -cf - .`.
 
 Tune concurrent frame generation by overriding `FRAME_WORKERS`:
 
@@ -94,22 +96,24 @@ Build and run without Compose:
 
 ```bash
 docker build -t gpx-route-generator .
-docker run --rm -p 8000:8000 --env-file .env -v "$PWD/data:/app/data" gpx-route-generator
+docker run --rm -p 127.0.0.1:8000:8000 --env-file .env -v gpx-app-data:/app/data gpx-route-generator
 ```
+
+`-p 127.0.0.1:8000:8000` keeps the container off every other network interface. Public traffic must go through a reverse proxy, not a direct publish; `-p 8000:8000` exposes the app to the whole network and is not used here. The `gpx-app-data` named volume starts with writable permissions for UID 10001 from the image, so a bind-mounted host directory is unnecessary.
 
 ## AWS Lightsail with Docker
 
 1. Create an Ubuntu Lightsail instance, attach a static IP, and allow inbound HTTP/HTTPS in the Lightsail firewall.
 2. Install Docker and the Compose plugin on the instance.
 3. Clone this repository onto the instance.
-4. Create `.env` from `.env.example` and set `GOOGLE_MAPS_API_KEY`. If you want to protect renders, also set `APP_ENV=production`, `RECAPTCHA_SITE_KEY`, and `RECAPTCHA_SECRET_KEY`.
+4. Create `.env` from `.env.example` and set `GOOGLE_MAPS_API_KEY`. A public instance must also set all three protection settings: `APP_ENV=production`, `RECAPTCHA_SITE_KEY`, and `RECAPTCHA_SECRET_KEY`. The container refuses to start in production without them unless you deliberately set the unsafe `ALLOW_UNPROTECTED_RENDERING=true` override.
 5. Start the app:
 
 ```bash
 docker compose up -d --build
 ```
 
-For production, put Nginx or Caddy in front of the container for HTTPS and proxy traffic to `127.0.0.1:8000`. Keep `./data` on the Lightsail disk, or move completed MP4s to S3 later if you need durable external storage.
+For production, put Nginx or Caddy in front of the container for HTTPS and proxy traffic to `127.0.0.1:8000`; Compose never publishes the port beyond loopback. Render outputs live in the `app-data` Docker volume on the Lightsail disk. Back it up with `docker run --rm -v app-data:/data alpine tar -C /data -cf - . > app-data-backup.tar`, or move completed MP4s to S3 later if you need durable external storage.
 
 ## Notes
 

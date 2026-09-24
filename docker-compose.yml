@@ -12,5 +12,8 @@ services:
       MAX_ROUTE_POINTS: ${MAX_ROUTE_POINTS:-50000}
       ALLOW_UNPROTECTED_RENDERING: ${ALLOW_UNPROTECTED_RENDERING:-false}
     volumes:
-      - ./data:/app/data
+      - app-data:/app/data
     restart: unless-stopped
+
+volumes:
+  app-data:

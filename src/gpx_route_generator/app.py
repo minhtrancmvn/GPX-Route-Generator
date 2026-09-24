@@ -34,6 +34,7 @@ from .models import (
 )
 from .preview import render_preview_frame_2d
 from .renderer import make_arrow, render_route_video
+from .request_limits import MULTIPART_OVERHEAD_BYTES, RequestBodyLimitMiddleware
 
 RECAPTCHA_MIN_SCORE = 0.5
 RECAPTCHA_VERIFY_URL = "https://www.google.com/recaptcha/api/siteverify"
@@ -125,6 +126,10 @@ def create_app(
     validate_settings(app.state.settings)
     app.state.jobs = JobStore()
     app.state.map_client_factory = map_client_factory
+    app.add_middleware(
+        RequestBodyLimitMiddleware,
+        max_body_bytes=app.state.settings.max_upload_bytes + MULTIPART_OVERHEAD_BYTES,
+    )
 
     @app.get("/")
     async def index(request: Request):
@@ -281,20 +286,26 @@ def create_app(
                 show_speed=show_speed,
                 show_elevation=show_elevation,
             )
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+        try:
             data = await _read_upload(
                 gpx_file, max_bytes=app.state.settings.max_upload_bytes
             )
             points = parse_gpx_bytes(
                 data, max_points=app.state.settings.max_route_points
             )
-            map_client = app.state.map_client_factory(app.state.settings)
-            image = render_preview_frame_2d(points, options, map_client)
         except UploadTooLargeError as exc:
             raise HTTPException(
                 status_code=413, detail="GPX upload is too large."
             ) from exc
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+        try:
+            map_client = app.state.map_client_factory(app.state.settings)
+            image = render_preview_frame_2d(points, options, map_client)
         except Exception:
             _log_sanitized_exception("Preview render failed")
             raise HTTPException(

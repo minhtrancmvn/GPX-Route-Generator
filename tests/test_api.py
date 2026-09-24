@@ -13,6 +13,7 @@ from gpx_route_generator.app import create_app
 from gpx_route_generator.config import Settings
 from gpx_route_generator.jobs import RenderJob
 from gpx_route_generator.maps import SolidColorMapClient
+from gpx_route_generator.request_limits import MULTIPART_OVERHEAD_BYTES
 
 VALID_GPX = """<?xml version="1.0" encoding="UTF-8"?>
 <gpx version="1.1" creator="pytest" xmlns="http://www.topografix.com/GPX/1/1">
@@ -70,6 +71,58 @@ def test_parse_rejects_oversized_upload(tmp_path: Path) -> None:
     )
     assert response.status_code == 413
     assert response.json()["detail"] == "GPX upload is too large."
+
+
+def make_gpx_above(target_bytes: int) -> bytes:
+    """Build valid GPX whose byte length is exactly ``target_bytes``."""
+    start = (
+        '<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="pytest">\n'
+    )
+    end = "  </trkseg></trk>\n</gpx>\n"
+    point = '    <trkpt lat="37.0000" lon="-122.0000"><ele>10</ele></trkpt>\n'
+    padding_bytes = max(0, target_bytes - len(start) - len(end) - len(point) - 18)
+    document = (
+        start + f"  <!--{'p' * padding_bytes}-->\n" + "  <trk><trkseg>\n" + point + end
+    )
+    return document.encode("utf-8")
+
+
+def test_parse_rejects_oversized_multipart_body_before_parsing(tmp_path: Path) -> None:
+    file_limit = 64 * 1024
+    max_body_bytes = file_limit + MULTIPART_OVERHEAD_BYTES
+    settings = replace(make_settings(tmp_path), max_upload_bytes=file_limit)
+    payload = make_gpx_above(max_body_bytes + 4096)
+    assert len(payload) > max_body_bytes
+    boundary = "gpx-test-boundary"
+    body = (
+        f"--{boundary}\r\n"
+        'Content-Disposition: form-data; name="gpx_file"; filename="route.gpx"\r\n'
+        "Content-Type: application/gpx+xml\r\n\r\n"
+    ).encode()
+    body += payload + f"\r\n--{boundary}--\r\n".encode()
+    assert len(body) > max_body_bytes
+
+    client = TestClient(create_app(settings=settings))
+    response = client.post(
+        "/api/gpx/parse",
+        content=body,
+        headers={"content-type": f"multipart/form-data; boundary={boundary}"},
+    )
+
+    assert response.status_code == 413
+    assert response.json()["detail"] == "Request body is too large."
+
+
+@pytest.mark.parametrize("path", ["/api/gpx/parse", "/api/preview", "/api/render"])
+def test_all_gpx_endpoints_reject_oversized_body(tmp_path: Path, path: str) -> None:
+    settings = replace(make_settings(tmp_path), max_upload_bytes=64)
+    client = TestClient(create_app(settings=settings))
+    response = client.post(
+        path,
+        data={"duration_seconds": "5", "fps": "1"},
+        files={"gpx_file": ("route.gpx", VALID_GPX, "application/gpx+xml")},
+    )
+    assert response.status_code == 413
 
 
 def test_parse_rejects_route_above_point_limit(tmp_path: Path) -> None:
@@ -237,6 +290,57 @@ def test_preview_hides_provider_exception_details(
     assert "Sensitive details redacted." in caplog.text
     assert "secret-google-key" not in caplog.text
     assert "maps.example.com" not in caplog.text
+    assert str(tmp_path) not in caplog.text
+
+
+def test_preview_keeps_option_validation_public(tmp_path: Path) -> None:
+    app = create_app(
+        settings=make_settings(tmp_path),
+        map_client_factory=lambda settings: SolidColorMapClient(),
+    )
+    client = TestClient(app)
+    response = client.post(
+        "/api/preview",
+        data={"duration_seconds": "4", "fps": "1"},
+        files={"gpx_file": ("route.gpx", VALID_GPX, "application/gpx+xml")},
+    )
+    assert response.status_code == 422
+    assert "Duration" in response.json()["detail"]
+
+
+def test_preview_provider_config_value_error_is_generic_500(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    secret_value = "provider-config-secret"
+
+    def failing_factory(settings: Settings) -> SolidColorMapClient:
+        raise ValueError(
+            "GOOGLE_MAPS_API_KEY=secret-google-key "
+            "url=https://maps.example.com/?key=secret-google-key "
+            f"path={tmp_path}/secret/{secret_value}"
+        )
+
+    app = create_app(
+        settings=make_settings(tmp_path), map_client_factory=failing_factory
+    )
+    with caplog.at_level(logging.ERROR):
+        response = TestClient(app).post(
+            "/api/preview",
+            data={"duration_seconds": "5", "fps": "1"},
+            files={"gpx_file": ("route.gpx", VALID_GPX, "application/gpx+xml")},
+        )
+
+    assert response.status_code == 500
+    assert response.json()["detail"] == (
+        "Preview could not be generated. Please try again."
+    )
+    assert "secret-google-key" not in response.text
+    assert "maps.example.com" not in response.text
+    assert secret_value not in response.text
+    assert str(tmp_path) not in response.text
+    assert "secret-google-key" not in caplog.text
+    assert "maps.example.com" not in caplog.text
+    assert secret_value not in caplog.text
     assert str(tmp_path) not in caplog.text
 
 
