@@ -19,6 +19,8 @@ class Settings:
     max_upload_bytes: int = 5 * 1024 * 1024
     max_route_points: int = 50_000
     allow_unprotected_rendering: bool = False
+    max_active_renders: int = 1
+    max_queued_renders: int = 2
 
     @property
     def recaptcha_enabled(self) -> bool:
@@ -42,11 +44,28 @@ def _get_positive_int(name: str, default: int) -> int:
     return value
 
 
+def _get_nonnegative_int(name: str, default: int) -> int:
+    raw_value = os.getenv(name)
+    if raw_value is None:
+        return default
+    try:
+        value = int(raw_value)
+    except ValueError as exc:
+        raise ValueError(f"{name} must be an integer zero or greater.") from exc
+    if value < 0:
+        raise ValueError(f"{name} must be zero or greater.")
+    return value
+
+
 def validate_settings(settings: Settings) -> None:
     if settings.max_upload_bytes <= 0:
         raise ValueError("MAX_UPLOAD_BYTES must be greater than zero.")
     if settings.max_route_points < 2:
         raise ValueError("MAX_ROUTE_POINTS must be at least two.")
+    if settings.max_active_renders < 1:
+        raise ValueError("MAX_ACTIVE_RENDERS must be at least one.")
+    if settings.max_queued_renders < 0:
+        raise ValueError("MAX_QUEUED_RENDERS must be zero or greater.")
     if settings.environment.lower() == "production":
         recaptcha_ready = bool(settings.recaptcha_site_key and settings.recaptcha_secret_key)
         if not recaptcha_ready and not settings.allow_unprotected_rendering:
@@ -70,6 +89,8 @@ def load_settings() -> Settings:
         max_upload_bytes=_get_positive_int("MAX_UPLOAD_BYTES", 5 * 1024 * 1024),
         max_route_points=_get_positive_int("MAX_ROUTE_POINTS", 50_000),
         allow_unprotected_rendering=os.getenv("ALLOW_UNPROTECTED_RENDERING", "").lower() in {"1", "true", "yes", "on"},
+        max_active_renders=_get_positive_int("MAX_ACTIVE_RENDERS", 1),
+        max_queued_renders=_get_nonnegative_int("MAX_QUEUED_RENDERS", 2),
     )
     validate_settings(settings)
     return settings

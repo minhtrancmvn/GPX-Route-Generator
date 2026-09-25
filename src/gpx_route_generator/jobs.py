@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from threading import Lock
+import copy
 
 
 @dataclass
@@ -54,7 +55,8 @@ class JobStore:
 
     def get(self, job_id: str) -> RenderJob | None:
         with self._lock:
-            return self._jobs.get(job_id)
+            job = self._jobs.get(job_id)
+            return copy.copy(job) if job is not None else None
 
     def update(self, job_id: str, **changes: object) -> RenderJob | None:
         with self._lock:
