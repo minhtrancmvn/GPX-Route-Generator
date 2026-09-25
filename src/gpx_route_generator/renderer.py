@@ -1,12 +1,18 @@
 from __future__ import annotations
 
+import os
+import signal
+import subprocess
 from collections.abc import Callable
-from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, as_completed, wait
+from concurrent.futures import Future, ThreadPoolExecutor, as_completed
+from contextlib import suppress
 from dataclasses import replace
 from io import BytesIO
 from pathlib import Path
-import os
-import subprocess
+from queue import Empty, Full, Queue
+from threading import Event, Thread
+from time import monotonic
+from typing import BinaryIO
 
 from PIL import Image, ImageDraw, ImageFont
 
@@ -23,6 +29,14 @@ from .models import RenderOptions, RoutePoint, validate_render_options
 ProgressCallback = Callable[[int, int, int], None]
 
 _AVATAR_CACHE: dict[tuple[str, int], Image.Image] = {}
+_FRAME_PROGRESS_TIMEOUT_SECONDS = 30.0
+_PROCESS_TERM_GRACE_SECONDS = 2.0
+_READER_JOIN_TIMEOUT_SECONDS = 1.0
+_STDERR_TAIL_BYTES = 1200
+
+
+class _FfmpegLifecycleError(RuntimeError):
+    """Raised when FFmpeg cannot receive rendered frames safely."""
 
 
 def _frame_worker_count() -> int:
@@ -102,6 +116,77 @@ def _render_video_frame(
     return frame.convert("RGB").tobytes()
 
 
+def _drain_stderr(stream: BinaryIO, tail: bytearray) -> None:
+    while chunk := stream.read(8192):
+        tail.extend(chunk)
+        del tail[:-_STDERR_TAIL_BYTES]
+
+
+def _close_stream(stream: BinaryIO | None) -> None:
+    if stream is not None and not stream.closed:
+        stream.close()
+
+
+def _terminate_process_group(process: subprocess.Popen[bytes]) -> None:
+    if os.name == "posix":
+        with suppress(OSError):
+            os.killpg(process.pid, signal.SIGTERM)
+    else:
+        with suppress(OSError):
+            process.terminate()
+    deadline = monotonic() + _PROCESS_TERM_GRACE_SECONDS
+    with suppress(OSError, subprocess.TimeoutExpired):
+        process.wait(timeout=max(0.0, deadline - monotonic()))
+    if os.name == "posix":
+        with suppress(OSError):
+            os.killpg(process.pid, signal.SIGKILL)
+    elif process.poll() is None:
+        with suppress(OSError):
+            process.kill()
+    with suppress(OSError, subprocess.TimeoutExpired):
+        process.wait(timeout=_PROCESS_TERM_GRACE_SECONDS)
+
+
+def _remove_partial_output(path: Path) -> None:
+    try:
+        path.unlink()
+    except FileNotFoundError:
+        pass
+
+
+def _write_frames(
+    stream: BinaryIO,
+    frames: Queue[bytes | BaseException | None],
+    written: Queue[int | BaseException],
+    stop: Event,
+) -> None:
+    try:
+        frame_index = 0
+        while not stop.is_set():
+            try:
+                frame = frames.get(timeout=0.05)
+            except Empty:
+                continue
+            if frame is None:
+                return
+            if isinstance(frame, BaseException):
+                raise frame
+            view = memoryview(frame)
+            while view:
+                count = stream.write(view)
+                if count is None:
+                    count = len(view)
+                if count <= 0:
+                    raise _FfmpegLifecycleError("ffmpeg stdin closed during frame write")
+                view = view[count:]
+            written.put(frame_index)
+            frame_index += 1
+    except BaseException as exc:
+        written.put(exc)
+    finally:
+        _close_stream(stream)
+
+
 def render_route_video(
     points: list[RoutePoint],
     options: RenderOptions,
@@ -110,6 +195,7 @@ def render_route_video(
     ffmpeg_path: str = "ffmpeg",
     progress_callback: ProgressCallback | None = None,
 ) -> None:
+    """Render route frames into an MP4, publishing output only after FFmpeg succeeds."""
     validate_render_options(options)
     samples, sample_distances = resample_by_distance(points, options.frame_count)
     camera_states = dynamic_camera_states(
@@ -130,7 +216,8 @@ def render_route_video(
     segment_images = _prefetch_segment_images(plan, options, map_client)
     map_requests = plan.map_request_count
     output_path.parent.mkdir(parents=True, exist_ok=True)
-
+    partial_path = output_path.with_name(f".{output_path.stem}.partial{output_path.suffix}")
+    _remove_partial_output(partial_path)
     command = [
         ffmpeg_path,
         "-y",
@@ -153,17 +240,46 @@ def render_route_video(
         "yuv420p",
         "-movflags",
         "+faststart",
-        str(output_path),
+        str(partial_path),
     ]
-    process = subprocess.Popen(command, stdin=subprocess.PIPE, stderr=subprocess.PIPE)
+    process = subprocess.Popen(
+        command,
+        stdin=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        start_new_session=os.name == "posix",
+    )
+    if process.stdin is None:
+        _terminate_process_group(process)
+        raise _FfmpegLifecycleError("ffmpeg did not provide stdin")
+    stderr_tail = bytearray()
+    stderr_thread = (
+        Thread(target=_drain_stderr, args=(process.stderr, stderr_tail), daemon=True)
+        if process.stderr is not None
+        else None
+    )
     try:
-        assert process.stdin is not None
-        worker_count = min(_frame_worker_count(), options.frame_count)
-        next_submit = 0
-        next_write = 0
-        pending: dict[int, Future[bytes]] = {}
-
-        def submit_frame(executor: ThreadPoolExecutor, index: int) -> None:
+        if stderr_thread is not None:
+            stderr_thread.start()
+    except BaseException:
+        _terminate_process_group(process)
+        _close_stream(process.stdin)
+        _close_stream(process.stderr)
+        _remove_partial_output(partial_path)
+        raise
+    worker_count = min(_frame_worker_count(), options.frame_count)
+    frames: Queue[bytes | BaseException | None] = Queue(maxsize=worker_count)
+    written: Queue[int | BaseException] = Queue()
+    stop = Event()
+    writer = Thread(target=_write_frames, args=(process.stdin, frames, written, stop), daemon=True)
+    writer.start()
+    executor = ThreadPoolExecutor(max_workers=worker_count)
+    pending: dict[int, Future[bytes]] = {}
+    next_submit = 0
+    next_enqueue = 0
+    completed_writes = 0
+    failed = True
+    try:
+        def submit_frame(index: int) -> None:
             pending[index] = executor.submit(
                 _render_video_frame,
                 index=index,
@@ -175,39 +291,66 @@ def render_route_video(
                 options=options,
             )
 
-        with ThreadPoolExecutor(max_workers=worker_count) as executor:
-            while next_submit < min(worker_count, options.frame_count):
-                submit_frame(executor, next_submit)
-                next_submit += 1
-
-            while next_write < options.frame_count:
-                future = pending.get(next_write)
-                if future is not None and future.done():
-                    frame_bytes = future.result()
-                    del pending[next_write]
-                    process.stdin.write(frame_bytes)
-                    next_write += 1
-                    if progress_callback:
-                        progress_callback(next_write, options.frame_count, map_requests)
-                    while next_submit < options.frame_count and len(pending) < worker_count:
-                        submit_frame(executor, next_submit)
-                        next_submit += 1
-                    continue
-
-                if pending:
-                    wait(tuple(pending.values()), return_when=FIRST_COMPLETED)
-        process.stdin.close()
-        stderr = process.stderr.read().decode("utf-8", errors="replace") if process.stderr else ""
-        return_code = process.wait()
+        while next_submit < min(worker_count, options.frame_count):
+            submit_frame(next_submit)
+            next_submit += 1
+        deadline = monotonic() + _FRAME_PROGRESS_TIMEOUT_SECONDS
+        while completed_writes < options.frame_count:
+            try:
+                result = written.get_nowait()
+            except Empty:
+                result = None
+            if isinstance(result, BaseException):
+                raise result
+            if isinstance(result, int):
+                if result != completed_writes:
+                    raise _FfmpegLifecycleError("ffmpeg frame writer completed frames out of order")
+                completed_writes += 1
+                deadline = monotonic() + _FRAME_PROGRESS_TIMEOUT_SECONDS
+                if progress_callback:
+                    progress_callback(completed_writes, options.frame_count, map_requests)
+            future = pending.get(next_enqueue)
+            if future is not None and future.done():
+                try:
+                    frames.put(future.result(), timeout=max(0.0, deadline - monotonic()))
+                except Full as exc:
+                    raise _FfmpegLifecycleError("ffmpeg frame write timed out") from exc
+                del pending[next_enqueue]
+                next_enqueue += 1
+                if next_submit < options.frame_count:
+                    submit_frame(next_submit)
+                    next_submit += 1
+                continue
+            if monotonic() >= deadline:
+                raise _FfmpegLifecycleError("ffmpeg frame production or write timed out")
+            stop.wait(0.005)
+        try:
+            frames.put(None, timeout=max(0.0, deadline - monotonic()))
+        except Full as exc:
+            raise _FfmpegLifecycleError("ffmpeg stdin writer timed out") from exc
+        writer.join(max(0.0, deadline - monotonic()))
+        if writer.is_alive():
+            raise _FfmpegLifecycleError("ffmpeg stdin writer timed out")
+        _close_stream(process.stdin)
+        return_code = process.wait(timeout=_FRAME_PROGRESS_TIMEOUT_SECONDS)
         if return_code != 0:
-            raise RuntimeError(f"ffmpeg failed with exit code {return_code}: {stderr[-1200:]}")
-    except Exception:
-        if process.stdin and not process.stdin.closed:
-            process.stdin.close()
-        process.kill()
-        process.wait()
-        raise
+            stderr = bytes(stderr_tail).decode("utf-8", errors="replace")
+            raise RuntimeError(f"ffmpeg failed with exit code {return_code}: {stderr}")
+        if stderr_thread is not None and stderr_thread.is_alive():
+            raise _FfmpegLifecycleError("ffmpeg stderr reader did not stop")
+        partial_path.replace(output_path)
+        failed = False
     finally:
+        stop.set()
+        for future in pending.values():
+            future.cancel()
+        executor.shutdown(wait=True, cancel_futures=True)
+        _close_stream(process.stdin)
+        if failed:
+            _terminate_process_group(process)
+            _remove_partial_output(partial_path)
+        if stderr_thread is not None:
+            stderr_thread.join(_READER_JOIN_TIMEOUT_SECONDS)
         for image in segment_images.values():
             image.close()
         segment_images.clear()
