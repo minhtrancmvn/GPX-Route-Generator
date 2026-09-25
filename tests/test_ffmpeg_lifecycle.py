@@ -191,7 +191,7 @@ def test_render_times_out_when_frame_producer_stalls(
     assert process.killed
 
 
-def test_render_keeps_only_stderr_tail_and_does_not_wait_for_descendant(
+def test_render_fails_if_descendant_keeps_stderr_open(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
     minimal_render: RenderOptions,
@@ -206,6 +206,7 @@ def test_render_keeps_only_stderr_tail_and_does_not_wait_for_descendant(
     process = FakeProcess(stdin)
     process.stderr = BlockingStderr()
     monkeypatch.setattr(renderer.subprocess, "Popen", lambda *_args, **_kwargs: process)
+    monkeypatch.setattr(renderer.os, "killpg", lambda _pid, _signal: process.kill())
 
     def successful_wait(timeout: float | None = None) -> int:
         (tmp_path / ".video.partial.mp4").write_bytes(b"video")
@@ -214,10 +215,40 @@ def test_render_keeps_only_stderr_tail_and_does_not_wait_for_descendant(
 
     process.wait = successful_wait
     started = monotonic()
-    renderer.render_route_video([], minimal_render, tmp_path / "video.mp4", object())
+    with pytest.raises(RuntimeError, match="stderr reader"):
+        renderer.render_route_video([], minimal_render, tmp_path / "video.mp4", object())
 
-    assert monotonic() - started < 0.15
-    assert (tmp_path / "video.mp4").read_bytes() == b"video"
+    assert monotonic() - started < 0.2
+    assert not (tmp_path / "video.mp4").exists()
+    assert process.killed
+
+
+def test_render_cleans_up_when_thread_start_fails(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    minimal_render: RenderOptions,
+) -> None:
+    stdin = BlockingStdin()
+    stdin.release.set()
+    process = FakeProcess(stdin)
+    monkeypatch.setattr(renderer.subprocess, "Popen", lambda *_args, **_kwargs: process)
+    real_thread = renderer.Thread
+
+    class FailingThread:
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            self._thread = real_thread(*args, **kwargs)
+
+        def start(self) -> None:
+            raise RuntimeError("thread unavailable")
+
+    monkeypatch.setattr(renderer, "Thread", FailingThread)
+    monkeypatch.setattr(renderer.os, "killpg", lambda _pid, _signal: process.kill())
+
+    with pytest.raises(RuntimeError, match="thread unavailable"):
+        renderer.render_route_video([], minimal_render, tmp_path / "video.mp4", object())
+
+    assert process.killed
+    assert not (tmp_path / ".video.partial.mp4").exists()
 
 
 def test_render_uses_mp4_suffix_for_partial_output(

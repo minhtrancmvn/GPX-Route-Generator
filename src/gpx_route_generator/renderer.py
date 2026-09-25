@@ -257,8 +257,15 @@ def render_route_video(
         if process.stderr is not None
         else None
     )
-    if stderr_thread is not None:
-        stderr_thread.start()
+    try:
+        if stderr_thread is not None:
+            stderr_thread.start()
+    except BaseException:
+        _terminate_process_group(process)
+        _close_stream(process.stdin)
+        _close_stream(process.stderr)
+        _remove_partial_output(partial_path)
+        raise
     worker_count = min(_frame_worker_count(), options.frame_count)
     frames: Queue[bytes | BaseException | None] = Queue(maxsize=worker_count)
     written: Queue[int | BaseException] = Queue()
@@ -329,6 +336,8 @@ def render_route_video(
         if return_code != 0:
             stderr = bytes(stderr_tail).decode("utf-8", errors="replace")
             raise RuntimeError(f"ffmpeg failed with exit code {return_code}: {stderr}")
+        if stderr_thread is not None and stderr_thread.is_alive():
+            raise _FfmpegLifecycleError("ffmpeg stderr reader did not stop")
         partial_path.replace(output_path)
         failed = False
     finally:
