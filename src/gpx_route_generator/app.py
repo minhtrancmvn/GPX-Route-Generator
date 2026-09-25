@@ -23,6 +23,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from .config import Settings, load_settings, validate_settings
+from .admission import RenderAdmission
 from .gpx import parse_gpx_bytes
 from .jobs import JobStore, RenderJob
 from .maps import GoogleStaticMapClient, StaticMapClient
@@ -125,6 +126,10 @@ def create_app(
     app.state.settings = settings or load_settings()
     validate_settings(app.state.settings)
     app.state.jobs = JobStore()
+    app.state.render_admission = RenderAdmission(
+        max_active=app.state.settings.max_active_renders,
+        max_queued=app.state.settings.max_queued_renders,
+    )
     app.state.map_client_factory = map_client_factory
     app.add_middleware(
         RequestBodyLimitMiddleware,
@@ -378,17 +383,30 @@ def create_app(
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
-        job_id = uuid4().hex
-        output_path = app.state.settings.jobs_dir / job_id / "route.mp4"
-        job = RenderJob(
-            id=job_id,
-            status="queued",
-            output_path=output_path,
-            estimated_map_requests=options.estimated_map_requests,
-            total_frames=options.frame_count,
-        )
-        app.state.jobs.add(job)
-        background_tasks.add_task(run_render_job, app, job_id, points, options)
+        admission_token = app.state.render_admission.enqueue()
+        if admission_token is None:
+            raise HTTPException(
+                status_code=429,
+                detail="Render capacity is full. Please try again later.",
+            )
+
+        try:
+            job_id = uuid4().hex
+            output_path = app.state.settings.jobs_dir / job_id / "route.mp4"
+            job = RenderJob(
+                id=job_id,
+                status="queued",
+                output_path=output_path,
+                estimated_map_requests=options.estimated_map_requests,
+                total_frames=options.frame_count,
+            )
+            app.state.jobs.add(job)
+            background_tasks.add_task(
+                run_render_job, app, job_id, points, options, admission_token
+            )
+        except Exception:
+            app.state.render_admission.cancel(admission_token)
+            raise
         return JSONResponse(status_code=202, content=job.to_dict())
 
     @app.get("/api/jobs/{job_id}")
@@ -416,41 +434,48 @@ def create_app(
     return app
 
 
-def run_render_job(app: FastAPI, job_id: str, points, options: RenderOptions) -> None:
+def run_render_job(
+    app: FastAPI,
+    job_id: str,
+    points,
+    options: RenderOptions,
+    admission_token,
+) -> None:
     settings: Settings = app.state.settings
-    app.state.jobs.update(job_id, status="running")
-    try:
+    with admission_token:
+        app.state.jobs.update(job_id, status="running")
+        try:
 
-        def update_progress(done: int, total: int, map_requests: int) -> None:
+            def update_progress(done: int, total: int, map_requests: int) -> None:
+                app.state.jobs.update(
+                    job_id,
+                    progress_frames=done,
+                    total_frames=total,
+                    actual_map_requests=map_requests,
+                )
+
+            job = app.state.jobs.get(job_id)
+            if job is None:
+                return
+            map_client = app.state.map_client_factory(settings)
+            render_route_video(
+                points=points,
+                options=options,
+                output_path=job.output_path,
+                map_client=map_client,
+                ffmpeg_path=settings.ffmpeg_path,
+                progress_callback=update_progress,
+            )
             app.state.jobs.update(
                 job_id,
-                progress_frames=done,
-                total_frames=total,
-                actual_map_requests=map_requests,
+                status="completed",
+                progress_frames=options.frame_count,
             )
-
-        job = app.state.jobs.get(job_id)
-        if job is None:
-            return
-        map_client = app.state.map_client_factory(settings)
-        render_route_video(
-            points=points,
-            options=options,
-            output_path=job.output_path,
-            map_client=map_client,
-            ffmpeg_path=settings.ffmpeg_path,
-            progress_callback=update_progress,
-        )
-        app.state.jobs.update(
-            job_id,
-            status="completed",
-            progress_frames=options.frame_count,
-        )
-    except Exception:
-        _log_sanitized_exception("Render job failed", job_id=job_id)
-        app.state.jobs.update(
-            job_id, status="failed", error="Render failed. Please try again."
-        )
+        except Exception:
+            _log_sanitized_exception("Render job failed", job_id=job_id)
+            app.state.jobs.update(
+                job_id, status="failed", error="Render failed. Please try again."
+            )
 
 
 app = create_app()
