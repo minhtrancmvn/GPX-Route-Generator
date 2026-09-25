@@ -5,7 +5,7 @@
 		}
     ],
     "settings": {
-        "window.zoomLevel": -2,
+        "window.zoomLevel": -1.5,
         "workbench.colorCustomizations": {
             "activityBar.activeBackground": "#999999",
             "activityBar.background": "#999999",
@@ -37,7 +37,9 @@
             "titleBar.activeForeground": "#15202b",
             "titleBar.border": "#808080",
             "titleBar.inactiveBackground": "#80808099",
-            "titleBar.inactiveForeground": "#15202b99"
+            "titleBar.inactiveForeground": "#15202b99",
+            "activityBar.activeBorder": "#15202b",
+            "activityBarTop.activeBorder": "#15202b"
         },
         "peacock.color": "grey"
     }
