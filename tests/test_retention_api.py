@@ -55,6 +55,18 @@ def test_startup_cleanup_removes_orphans_and_partial_files(tmp_path: Path) -> No
     assert not partial.exists()
 
 
+def test_storage_cleanup_failure_returns_503_instead_of_500(tmp_path: Path, monkeypatch) -> None:
+    settings = replace(make_settings(tmp_path), max_job_storage_bytes=5)
+    app = create_app(settings=settings)
+    monkeypatch.setattr(app.state.retention, "cleanup", lambda _store: (_ for _ in ()).throw(OSError("busy")))
+    client = TestClient(app)
+
+    response = post_render(client)
+
+    assert response.status_code == 503
+    assert response.json()["detail"] == "Render storage is temporarily unavailable."
+
+
 def test_render_returns_503_when_storage_budget_is_exhausted(tmp_path: Path) -> None:
     settings = replace(make_settings(tmp_path), max_job_storage_bytes=5)
     app = create_app(

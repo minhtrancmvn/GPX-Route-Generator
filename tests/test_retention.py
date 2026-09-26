@@ -94,6 +94,37 @@ def test_cleanup_unlinks_symlink_without_deleting_target_job(tmp_path: Path) -> 
     assert not orphan.exists()
 
 
+def test_storage_accounting_ignores_symlinks(tmp_path: Path) -> None:
+    outside = tmp_path.parent / "outside-large.mp4"
+    outside.write_bytes(b"x" * 100)
+    (tmp_path / "outside-link.mp4").symlink_to(outside)
+
+    retention = JobRetention(tmp_path, retention_hours=24, max_jobs=100, max_bytes=10)
+
+    assert retention.storage_bytes() == 0
+
+
+def test_failed_directory_removal_keeps_job_metadata(
+    tmp_path: Path, monkeypatch
+) -> None:
+    store = JobStore()
+    expired = make_job(tmp_path, "expired", "completed", age_hours=25)
+    store.add(expired)
+    retention = JobRetention(tmp_path, retention_hours=24, max_jobs=100, max_bytes=1_000)
+    original_rmdir = Path.rmdir
+
+    def fail_expired(path: Path) -> None:
+        if path == expired.output_path.parent:
+            raise OSError("directory busy")
+        original_rmdir(path)
+
+    monkeypatch.setattr(Path, "rmdir", fail_expired)
+
+    retention.cleanup(store)
+
+    assert store.get("expired") is not None
+
+
 def test_cleanup_reports_storage_and_rejects_invalid_paths(tmp_path: Path) -> None:
     store = JobStore()
     job = make_job(tmp_path, "job", "completed")

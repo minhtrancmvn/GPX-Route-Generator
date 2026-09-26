@@ -394,7 +394,15 @@ def create_app(
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
-        if not app.state.retention.has_capacity(app.state.jobs):
+        try:
+            has_storage_capacity = app.state.retention.has_capacity(app.state.jobs)
+        except Exception:
+            _log_sanitized_exception("Job storage capacity check failed")
+            raise HTTPException(
+                status_code=503,
+                detail="Render storage is temporarily unavailable.",
+            ) from None
+        if not has_storage_capacity:
             raise HTTPException(
                 status_code=503,
                 detail="Render storage is full. Please try again later.",
