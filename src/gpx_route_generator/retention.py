@@ -51,7 +51,7 @@ class JobRetention:
             try:
                 resolved.rmdir()
             except OSError:
-                pass
+                return False
         else:
             resolved.unlink(missing_ok=True)
         return True
@@ -59,7 +59,11 @@ class JobRetention:
     def storage_bytes(self) -> int:
         if not self.jobs_dir.exists():
             return 0
-        return sum(path.stat().st_size for path in self.jobs_dir.rglob("*") if path.is_file())
+        return sum(
+            path.stat().st_size
+            for path in self.jobs_dir.rglob("*")
+            if path.is_file() and not path.is_symlink()
+        )
 
     def has_capacity(self, store: JobStore) -> bool:
         with self._lock:
