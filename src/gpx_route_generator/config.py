@@ -21,6 +21,9 @@ class Settings:
     allow_unprotected_rendering: bool = False
     max_active_renders: int = 1
     max_queued_renders: int = 2
+    job_retention_hours: int = 24
+    max_retained_jobs: int = 100
+    max_job_storage_bytes: int = 2 * 1024 * 1024 * 1024
 
     @property
     def recaptcha_enabled(self) -> bool:
@@ -66,6 +69,12 @@ def validate_settings(settings: Settings) -> None:
         raise ValueError("MAX_ACTIVE_RENDERS must be at least one.")
     if settings.max_queued_renders < 0:
         raise ValueError("MAX_QUEUED_RENDERS must be zero or greater.")
+    if settings.job_retention_hours < 1:
+        raise ValueError("JOB_RETENTION_HOURS must be at least one.")
+    if settings.max_retained_jobs < 1:
+        raise ValueError("MAX_RETAINED_JOBS must be at least one.")
+    if settings.max_job_storage_bytes < 1:
+        raise ValueError("MAX_JOB_STORAGE_BYTES must be at least one.")
     if settings.environment.lower() == "production":
         recaptcha_ready = bool(settings.recaptcha_site_key and settings.recaptcha_secret_key)
         if not recaptcha_ready and not settings.allow_unprotected_rendering:
@@ -91,6 +100,9 @@ def load_settings() -> Settings:
         allow_unprotected_rendering=os.getenv("ALLOW_UNPROTECTED_RENDERING", "").lower() in {"1", "true", "yes", "on"},
         max_active_renders=_get_positive_int("MAX_ACTIVE_RENDERS", 1),
         max_queued_renders=_get_nonnegative_int("MAX_QUEUED_RENDERS", 2),
+        job_retention_hours=_get_positive_int("JOB_RETENTION_HOURS", 24),
+        max_retained_jobs=_get_positive_int("MAX_RETAINED_JOBS", 100),
+        max_job_storage_bytes=_get_positive_int("MAX_JOB_STORAGE_BYTES", 2 * 1024 * 1024 * 1024),
     )
     validate_settings(settings)
     return settings

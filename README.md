@@ -88,6 +88,8 @@ Open http://127.0.0.1:8000. Compose publishes the port on loopback only; put Ngi
 
 Limit render admission with `MAX_ACTIVE_RENDERS` and `MAX_QUEUED_RENDERS`. Defaults are one active render and two queued jobs; additional submissions receive HTTP 429 until capacity is available. These limits apply per application process because V1 uses an in-process queue.
 
+Control generated-file retention with `JOB_RETENTION_HOURS`, `MAX_RETAINED_JOBS`, and `MAX_JOB_STORAGE_BYTES`. Defaults retain terminal jobs for 24 hours, at most 100 jobs, and up to 2 GiB. Queued and running jobs are never removed; new renders receive HTTP 503 when storage remains full after cleanup.
+
 Tune concurrent frame generation by overriding `FRAME_WORKERS`:
 
 ```bash
