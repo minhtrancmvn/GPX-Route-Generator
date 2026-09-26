@@ -38,6 +38,21 @@ def test_cleanup_removes_expired_terminal_jobs_but_preserves_active(tmp_path: Pa
     assert active.output_path.exists()
 
 
+def test_cleanup_preserves_partial_output_for_active_job(tmp_path: Path) -> None:
+    store = JobStore()
+    active = make_job(tmp_path, "active", "running")
+    partial = active.output_path.with_name(
+        f".{active.output_path.stem}.partial{active.output_path.suffix}"
+    )
+    partial.write_bytes(b"encoding")
+    store.add(active)
+
+    JobRetention(tmp_path, retention_hours=24, max_jobs=100, max_bytes=1_000).cleanup(store)
+
+    assert partial.read_bytes() == b"encoding"
+    assert active.output_path.exists()
+
+
 def test_cleanup_removes_orphan_and_partial_files(tmp_path: Path) -> None:
     store = JobStore()
     orphan = tmp_path / "orphan"

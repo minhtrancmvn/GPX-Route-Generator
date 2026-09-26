@@ -81,8 +81,15 @@ class JobRetention:
             for job in terminal[: max(0, len(terminal) - self.max_jobs)]:
                 self._remove_job(store, job)
             if self.jobs_dir.exists():
+                active_partial_paths = {
+                    job.output_path.parent
+                    / f".{job.output_path.stem}.partial{job.output_path.suffix}"
+                    for job in store.list_jobs()
+                    if job.status in {"queued", "running"}
+                }
                 for partial in self.jobs_dir.rglob("*.partial.mp4"):
-                    self.remove_path_safely(partial)
+                    if partial not in active_partial_paths:
+                        self.remove_path_safely(partial)
                 known = {job.id for job in store.list_jobs()}
                 for child in self.jobs_dir.iterdir():
                     if child.is_dir() and child.name not in known:
