@@ -58,6 +58,18 @@ class JobStore:
             job = self._jobs.get(job_id)
             return copy.copy(job) if job is not None else None
 
+    def list_jobs(self) -> list[RenderJob]:
+        with self._lock:
+            return [copy.copy(job) for job in self._jobs.values()]
+
+    def remove_terminal(self, job_id: str) -> bool:
+        with self._lock:
+            job = self._jobs.get(job_id)
+            if job is None or job.status not in {"completed", "failed"}:
+                return False
+            del self._jobs[job_id]
+            return True
+
     def update(self, job_id: str, **changes: object) -> RenderJob | None:
         with self._lock:
             job = self._jobs.get(job_id)

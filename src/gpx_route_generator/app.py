@@ -36,6 +36,7 @@ from .models import (
 from .preview import render_preview_frame_2d
 from .renderer import make_arrow, render_route_video
 from .request_limits import MULTIPART_OVERHEAD_BYTES, RequestBodyLimitMiddleware
+from .retention import JobRetention
 
 RECAPTCHA_MIN_SCORE = 0.5
 RECAPTCHA_VERIFY_URL = "https://www.google.com/recaptcha/api/siteverify"
@@ -130,6 +131,16 @@ def create_app(
         max_active=app.state.settings.max_active_renders,
         max_queued=app.state.settings.max_queued_renders,
     )
+    app.state.retention = JobRetention(
+        app.state.settings.jobs_dir,
+        retention_hours=app.state.settings.job_retention_hours,
+        max_jobs=app.state.settings.max_retained_jobs,
+        max_bytes=app.state.settings.max_job_storage_bytes,
+    )
+    try:
+        app.state.retention.cleanup(app.state.jobs)
+    except Exception:
+        _log_sanitized_exception("Startup job retention cleanup failed")
     app.state.map_client_factory = map_client_factory
     app.add_middleware(
         RequestBodyLimitMiddleware,
@@ -383,6 +394,11 @@ def create_app(
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
+        if not app.state.retention.has_capacity(app.state.jobs):
+            raise HTTPException(
+                status_code=503,
+                detail="Render storage is full. Please try again later.",
+            )
         admission_token = app.state.render_admission.enqueue()
         if admission_token is None:
             raise HTTPException(
@@ -476,6 +492,11 @@ def run_render_job(
             app.state.jobs.update(
                 job_id, status="failed", error="Render failed. Please try again."
             )
+        finally:
+            try:
+                app.state.retention.cleanup(app.state.jobs)
+            except Exception:
+                _log_sanitized_exception("Job retention cleanup failed", job_id=job_id)
 
 
 app = create_app()
