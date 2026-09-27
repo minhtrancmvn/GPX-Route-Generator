@@ -24,10 +24,22 @@ class SlidingWindowLimiter:
         self._requests: defaultdict[str, deque[float]] = defaultdict(deque)
         self._lock = Lock()
 
+    @property
+    def tracked_keys(self) -> int:
+        with self._lock:
+            return len(self._requests)
+
     def check(self, key: str, *, now: float | None = None) -> int | None:
         current = monotonic() if now is None else now
         cutoff = current - self.window_seconds
         with self._lock:
+            expired_keys = [
+                tracked_key
+                for tracked_key, timestamps in self._requests.items()
+                if not timestamps or timestamps[-1] <= cutoff
+            ]
+            for expired_key in expired_keys:
+                del self._requests[expired_key]
             requests = self._requests[key]
             while requests and requests[0] <= cutoff:
                 requests.popleft()

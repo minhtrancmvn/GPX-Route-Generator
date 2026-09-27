@@ -25,6 +25,15 @@ def test_limiter_allows_after_window_expires() -> None:
     assert limiter.check("client", now=70) is None
 
 
+def test_limiter_evicts_idle_client_keys() -> None:
+    limiter = SlidingWindowLimiter(limit=1, window_seconds=60)
+    limiter.check("expired", now=0)
+
+    limiter.check("current", now=61)
+
+    assert limiter.tracked_keys == 1
+
+
 def test_limiter_tracks_clients_separately() -> None:
     limiter = SlidingWindowLimiter(limit=1, window_seconds=60)
     limiter.check("first", now=0)
