@@ -24,6 +24,8 @@ class Settings:
     job_retention_hours: int = 24
     max_retained_jobs: int = 100
     max_job_storage_bytes: int = 2 * 1024 * 1024 * 1024
+    preview_requests_per_minute: int = 30
+    render_requests_per_minute: int = 6
 
     @property
     def recaptcha_enabled(self) -> bool:
@@ -75,6 +77,10 @@ def validate_settings(settings: Settings) -> None:
         raise ValueError("MAX_RETAINED_JOBS must be at least one.")
     if settings.max_job_storage_bytes < 1:
         raise ValueError("MAX_JOB_STORAGE_BYTES must be at least one.")
+    if settings.preview_requests_per_minute < 1:
+        raise ValueError("PREVIEW_REQUESTS_PER_MINUTE must be at least one.")
+    if settings.render_requests_per_minute < 1:
+        raise ValueError("RENDER_REQUESTS_PER_MINUTE must be at least one.")
     if settings.environment.lower() == "production":
         recaptcha_ready = bool(settings.recaptcha_site_key and settings.recaptcha_secret_key)
         if not recaptcha_ready and not settings.allow_unprotected_rendering:
@@ -103,6 +109,8 @@ def load_settings() -> Settings:
         job_retention_hours=_get_positive_int("JOB_RETENTION_HOURS", 24),
         max_retained_jobs=_get_positive_int("MAX_RETAINED_JOBS", 100),
         max_job_storage_bytes=_get_positive_int("MAX_JOB_STORAGE_BYTES", 2 * 1024 * 1024 * 1024),
+        preview_requests_per_minute=_get_positive_int("PREVIEW_REQUESTS_PER_MINUTE", 30),
+        render_requests_per_minute=_get_positive_int("RENDER_REQUESTS_PER_MINUTE", 6),
     )
     validate_settings(settings)
     return settings
