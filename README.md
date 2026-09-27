@@ -90,6 +90,8 @@ Limit render admission with `MAX_ACTIVE_RENDERS` and `MAX_QUEUED_RENDERS`. Defau
 
 Control generated-file retention with `JOB_RETENTION_HOURS`, `MAX_RETAINED_JOBS`, and `MAX_JOB_STORAGE_BYTES`. Defaults retain terminal jobs for 24 hours, at most 100 jobs, and up to 2 GiB. Queued and running jobs are never removed; new renders receive HTTP 503 when storage remains full after cleanup.
 
+Basic per-process peer throttling limits GPX parsing, preview, and render abuse before multipart parsing. GPX parse and preview share a 30-request-per-minute budget; render allows 6 requests per minute per connecting peer. Excess requests receive HTTP 429 with `Retry-After`. Behind Nginx or Caddy, all users share the proxy peer quota because the app deliberately does not trust forwarded headers. Configure per-client rate limiting at the reverse proxy when public traffic needs distinct client quotas.
+
 Tune concurrent frame generation by overriding `FRAME_WORKERS`:
 
 ```bash

@@ -35,6 +35,7 @@ from .models import (
 )
 from .preview import render_preview_frame_2d
 from .renderer import make_arrow, render_route_video
+from .rate_limit import RateLimitMiddleware, SlidingWindowLimiter
 from .request_limits import MULTIPART_OVERHEAD_BYTES, RequestBodyLimitMiddleware
 from .retention import JobRetention
 
@@ -130,6 +131,17 @@ def create_app(
     app.state.render_admission = RenderAdmission(
         max_active=app.state.settings.max_active_renders,
         max_queued=app.state.settings.max_queued_renders,
+    )
+    app.state.preview_limiter = SlidingWindowLimiter(
+        limit=app.state.settings.preview_requests_per_minute
+    )
+    app.state.render_limiter = SlidingWindowLimiter(
+        limit=app.state.settings.render_requests_per_minute
+    )
+    app.add_middleware(
+        RateLimitMiddleware,
+        preview_limiter=app.state.preview_limiter,
+        render_limiter=app.state.render_limiter,
     )
     app.state.retention = JobRetention(
         app.state.settings.jobs_dir,
@@ -266,6 +278,7 @@ def create_app(
 
     @app.post("/api/preview")
     async def preview_frame(
+        request: Request,
         gpx_file: UploadFile = File(...),
         output_format: str = Form("landscape"),
         duration_seconds: float = Form(10),
