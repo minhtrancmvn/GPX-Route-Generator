@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import math
 import sys
+from threading import BoundedSemaphore
 from collections.abc import Callable
 from io import BytesIO
 from pathlib import Path
@@ -21,6 +22,7 @@ from fastapi import (
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from starlette.concurrency import run_in_threadpool
 
 from .config import Settings, load_settings, validate_settings
 from .admission import RenderAdmission
@@ -138,6 +140,7 @@ def create_app(
     app.state.render_limiter = SlidingWindowLimiter(
         limit=app.state.settings.render_requests_per_minute
     )
+    app.state.preview_slots = BoundedSemaphore(app.state.settings.max_active_previews)
     app.add_middleware(
         RateLimitMiddleware,
         preview_limiter=app.state.preview_limiter,
@@ -322,25 +325,39 @@ def create_app(
             data = await _read_upload(
                 gpx_file, max_bytes=app.state.settings.max_upload_bytes
             )
-            points = parse_gpx_bytes(
-                data, max_points=app.state.settings.max_route_points
-            )
         except UploadTooLargeError as exc:
             raise HTTPException(
                 status_code=413, detail="GPX upload is too large."
             ) from exc
-        except ValueError as exc:
-            raise HTTPException(status_code=422, detail=str(exc)) from exc
 
+        if not app.state.preview_slots.acquire(blocking=False):
+            raise HTTPException(
+                status_code=429,
+                detail="Preview capacity is full. Please try again later.",
+            )
         try:
+            try:
+                points = await run_in_threadpool(
+                    parse_gpx_bytes,
+                    data,
+                    max_points=app.state.settings.max_route_points,
+                )
+            except ValueError as exc:
+                raise HTTPException(status_code=422, detail=str(exc)) from exc
             map_client = app.state.map_client_factory(app.state.settings)
-            image = render_preview_frame_2d(points, options, map_client)
+            image = await run_in_threadpool(
+                render_preview_frame_2d, points, options, map_client
+            )
+        except HTTPException:
+            raise
         except Exception:
             _log_sanitized_exception("Preview render failed")
             raise HTTPException(
                 status_code=500,
                 detail="Preview could not be generated. Please try again.",
             ) from None
+        finally:
+            app.state.preview_slots.release()
 
         buffer = BytesIO()
         image.save(buffer, format="PNG")
@@ -371,8 +388,10 @@ def create_app(
                 status_code=400,
                 detail="Set GOOGLE_MAPS_API_KEY in .env before rendering.",
             )
-        verify_recaptcha(
-            recaptcha_token, request.client.host if request.client else None
+        await run_in_threadpool(
+            verify_recaptcha,
+            recaptcha_token,
+            request.client.host if request.client else None,
         )
         try:
             options = _build_options(
