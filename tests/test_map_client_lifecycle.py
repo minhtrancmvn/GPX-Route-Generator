@@ -108,6 +108,39 @@ def test_map_client_rejects_fetch_after_close(monkeypatch) -> None:
         client.fetch(1, 2, RenderOptions())
 
 
+def test_map_client_close_attempts_every_session_when_one_close_fails(monkeypatch) -> None:
+    created: list[FakeSession] = []
+    lock = Lock()
+
+    class SometimesFailingSession(FakeSession):
+        def close(self) -> None:
+            super().close()
+            if self is created[0]:
+                raise RuntimeError("close failed")
+
+    monkeypatch.setattr(
+        maps_module.requests,
+        "Session",
+        lambda: SometimesFailingSession(created, lock),
+    )
+    client = GoogleStaticMapClient("key")
+    options = RenderOptions()
+    barrier = Barrier(2)
+
+    def fetch(_: int) -> bytes:
+        barrier.wait()
+        return client.fetch(1, 2, options)
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        list(executor.map(fetch, range(2)))
+
+    with pytest.raises(RuntimeError, match="close failed"):
+        client.close()
+
+    assert len(created) == 2
+    assert all(session.closed for session in created)
+
+
 def test_map_client_close_closes_all_thread_sessions(monkeypatch) -> None:
     created: list[FakeSession] = []
     lock = Lock()

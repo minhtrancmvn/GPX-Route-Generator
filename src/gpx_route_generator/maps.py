@@ -60,8 +60,15 @@ class GoogleStaticMapClient:
                 self._condition.wait()
             sessions = self._sessions[:]
             self._sessions.clear()
+        first_error: Exception | None = None
         for session in sessions:
-            session.close()
+            try:
+                session.close()
+            except Exception as exc:
+                if first_error is None:
+                    first_error = exc
+        if first_error is not None:
+            raise first_error
 
     def fetch(
         self,
