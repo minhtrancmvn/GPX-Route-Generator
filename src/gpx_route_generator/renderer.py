@@ -40,6 +40,7 @@ _FRAME_PROGRESS_TIMEOUT_SECONDS = 30.0
 _PROCESS_TERM_GRACE_SECONDS = 2.0
 _READER_JOIN_TIMEOUT_SECONDS = 1.0
 _STDERR_TAIL_BYTES = 1200
+_TRAIL_DECIMATION_LOOKAHEAD = 32
 
 
 class _FfmpegLifecycleError(RuntimeError):
@@ -490,7 +491,7 @@ def visible_trail_points(
         world_to_frame(point, camera_center_world, options)
         for point in sample_world_pixels
     ]
-    if len(screen_points) <= 2:
+    if len(screen_points) <= 2 or _all_interior_turns_are_sharp(screen_points):
         return screen_points
 
     margin = float(options.trail_width + 1)
@@ -544,6 +545,14 @@ def _add_safe_culling_indexes(
         safety_indexes.add(midpoint)
         intervals.extend(((start, midpoint), (midpoint, end)))
     return safety_indexes
+
+
+def _all_interior_turns_are_sharp(points: list[tuple[float, float]]) -> bool:
+    """Return whether every interior vertex must remain for trail fidelity."""
+    return all(
+        _is_sharp_turn(points[index - 1], points[index], points[index + 1])
+        for index in range(1, len(points) - 1)
+    )
 
 
 def _segment_intersects_viewport(
@@ -617,33 +626,29 @@ def _is_sharp_turn(
 def _decimate_trail_points(
     points: list[tuple[float, float]], protected_indexes: set[int]
 ) -> list[tuple[float, float]]:
-    """Remove only points within one pixel of retained screen-space segments."""
+    """Remove only points within one pixel of bounded screen-space chords."""
     retained = set(protected_indexes)
     boundaries = sorted(protected_indexes)
     for start, end in zip(boundaries, boundaries[1:]):
-        _retain_deviation_points(points, start, end, retained)
+        _retain_bounded_deviation_points(points, start, end, retained)
     return [point for index, point in enumerate(points) if index in retained]
 
 
-def _retain_deviation_points(
+def _retain_bounded_deviation_points(
     points: list[tuple[float, float]], start: int, end: int, retained: set[int]
 ) -> None:
-    """Iteratively retain points farther than one pixel from segment chords."""
-    intervals = [(start, end)]
-    while intervals:
-        interval_start, interval_end = intervals.pop()
-        max_deviation = 0.0
-        furthest_index: int | None = None
-        for index in range(interval_start + 1, interval_end):
-            deviation = _perpendicular_deviation(
-                points[index], points[interval_start], points[interval_end]
-            )
-            if deviation > max_deviation:
-                max_deviation = deviation
-                furthest_index = index
-        if furthest_index is not None and max_deviation > 1.0:
-            retained.add(furthest_index)
-            intervals.extend(((interval_start, furthest_index), (furthest_index, interval_end)))
+    """Use fixed-lookahead chords to bound decimation work to O(points)."""
+    anchor = start
+    while anchor < end:
+        candidate = min(anchor + _TRAIL_DECIMATION_LOOKAHEAD, end)
+        if any(
+            _perpendicular_deviation(points[index], points[anchor], points[candidate]) > 1.0
+            for index in range(anchor + 1, candidate)
+        ):
+            retained.update(range(anchor + 1, candidate + 1))
+        else:
+            retained.add(candidate)
+        anchor = candidate
 
 
 def _perpendicular_deviation(

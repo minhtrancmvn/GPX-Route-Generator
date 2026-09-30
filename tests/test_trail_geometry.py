@@ -8,6 +8,7 @@ from math import dist
 from PIL import Image, ImageDraw
 import pytest
 
+import gpx_route_generator.renderer as renderer
 from gpx_route_generator.models import OutputFormat, RenderOptions, RoutePoint
 from gpx_route_generator.renderer import compose_frame, visible_trail_points, world_to_frame
 
@@ -182,6 +183,27 @@ def test_portrait_and_landscape_trails_match_reference_pixels() -> None:
         assert actual.tobytes() == _reference_frame(projected_points, options).tobytes()
 
 
+def test_decimation_checks_a_bounded_number_of_points() -> None:
+    points = [(float(index), float(index % 2)) for index in range(1_800)]
+    calls = 0
+    original = renderer._perpendicular_deviation
+
+    def counting_deviation(
+        point: tuple[float, float], start: tuple[float, float], end: tuple[float, float]
+    ) -> float:
+        nonlocal calls
+        calls += 1
+        return original(point, start, end)
+
+    with pytest.MonkeyPatch.context() as patcher:
+        patcher.setattr(renderer, "_perpendicular_deviation", counting_deviation)
+        visible = renderer._decimate_trail_points(points, {0, len(points) - 1})
+
+    assert calls <= len(points) * renderer._TRAIL_DECIMATION_LOOKAHEAD
+    assert visible[0] == points[0]
+    assert visible[-1] == points[-1]
+
+
 def test_long_nearly_straight_route_submits_few_points() -> None:
     options = _options()
     screen_points = [(50.0 + index, options.height / 2 + (index % 3) * 0.15) for index in range(1_800)]
@@ -189,7 +211,7 @@ def test_long_nearly_straight_route_submits_few_points() -> None:
 
     visible = visible_trail_points(world_points, camera_center, options)
 
-    assert len(visible) < 16
+    assert len(visible) <= 1 + 1_800 // renderer._TRAIL_DECIMATION_LOOKAHEAD
     assert visible[0] == screen_points[0]
     assert visible[-1] == pytest.approx(screen_points[-1])
 

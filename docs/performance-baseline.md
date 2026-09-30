@@ -128,15 +128,15 @@ PYTHONPATH=src python3 -m benchmarks.benchmark_trail --frames 900
 PYTHONPATH=src python3 -m benchmarks.benchmark_trail --frames 1800
 ```
 
-Environment: Python 3.14.6, macOS 27.0 arm64. Synthetic nearly straight trail with no map I/O, metric graphs, or HUD. The benchmark measures one `compose_frame` call and reports source versus submitted polyline points.
+Environment: Python 3.14.6, macOS 27.0 arm64. No map I/O, metric graphs, or HUD. Each row renders every frame `0..N-1` through `compose_frame` under identical legacy and optimized workloads. `straight` is a nearly collinear fixture; `zigzag` keeps every turn to represent a non-decimable adversarial route.
 
-| Frames | Before preview composition (s) | Before submitted points | After composition (s) | After submitted points |
-|---:|---:|---:|---:|---:|
-| 450 | 0.080285 | 450 | 0.002057 | 2 |
-| 900 | 0.035529 | 900 | 0.002965 | 2 |
-| 1,800 | 0.040463 | 1,800 | 0.003832 | 4 |
+| Frames | Straight legacy (s) | Straight optimized (s) | Straight legacy / optimized submitted | Zigzag legacy (s) | Zigzag optimized (s) | Zigzag legacy / optimized submitted |
+|---:|---:|---:|---:|---:|---:|---:|
+| 450 | 0.523911 | 0.420812 | 101,474 / 3,824 | 0.502972 | 0.532605 | 101,474 / 101,474 |
+| 900 | 1.425125 | 1.208893 | 405,449 / 13,978 | 1.466262 | 1.537612 | 405,449 / 405,449 |
+| 1,800 | 4.871557 | 4.326457 | 1,620,899 / 50,341 | 5.142784 | 5.455868 | 1,620,899 / 1,620,899 |
 
-Before timings use existing mocked-map preview benchmark and include camera planning; after timings isolate trail composition. They are context measurements, not direct like-for-like speedup claims. The submitted-point count confirms conservative screen-space decimation for this straight fixture.
+Straight routes submit far fewer points across complete renders. Zigzag runs retain all required sharp turns; optimized timings stay within 6.4% of legacy at all sizes, showing no material worst-case regression. Bounded lookahead limits simplification work per input point.
 
 ## Correctness invariants
 
