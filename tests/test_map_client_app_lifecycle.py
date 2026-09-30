@@ -4,7 +4,7 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
-from gpx_route_generator.app import create_app
+from gpx_route_generator.app import _close_map_client, create_app
 from gpx_route_generator.maps import SolidColorMapClient
 
 from test_api import make_settings, post_render
@@ -24,6 +24,15 @@ def test_fetch_only_injected_client_remains_supported(tmp_path: Path) -> None:
     response = post_render(client)
 
     assert response.status_code == 202
+
+
+def test_close_property_failure_is_suppressed() -> None:
+    class ClosePropertyFailingClient(SolidColorMapClient):
+        @property
+        def close(self):
+            raise RuntimeError("close lookup failed")
+
+    _close_map_client(ClosePropertyFailingClient())
 
 
 def test_close_failure_does_not_mask_successful_render(tmp_path: Path) -> None:
