@@ -167,6 +167,7 @@ def create_app(
     except Exception:
         _log_sanitized_exception("Startup job retention cleanup failed")
     app.state.map_client_factory = map_client_factory
+    app.state.close_map_clients = map_client_factory is default_map_client_factory
     app.add_middleware(
         RequestBodyLimitMiddleware,
         max_body_bytes=app.state.settings.max_upload_bytes + MULTIPART_OVERHEAD_BYTES,
@@ -360,7 +361,8 @@ def create_app(
                     render_preview_frame_2d, points, options, map_client
                 )
             finally:
-                _close_map_client(map_client)
+                if app.state.close_map_clients:
+                    _close_map_client(map_client)
         except HTTPException:
             raise
         except Exception:
@@ -537,7 +539,8 @@ def run_render_job(
                     progress_callback=update_progress,
                 )
             finally:
-                _close_map_client(map_client)
+                if app.state.close_map_clients:
+                    _close_map_client(map_client)
             app.state.jobs.update(
                 job_id,
                 status="completed",
