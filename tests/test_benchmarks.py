@@ -64,9 +64,11 @@ def test_trail_benchmark_reports_composition_and_decimated_submission() -> None:
     assert result["correctness"]["submitted_point_count"] < 24 * 24
     assert result["correctness"]["first_point_preserved"]
     assert result["correctness"]["latest_point_preserved"]
-    assert set(result["fixtures"]) == {"straight", "zigzag"}
+    assert set(result["fixtures"]) == {"straight", "zigzag", "moving_zigzag"}
     for fixture in result["fixtures"].values():
         assert fixture["legacy_seconds"] >= 0
         assert fixture["optimized_seconds"] >= 0
         assert fixture["legacy_submitted_points"] > 0
         assert fixture["optimized_submitted_points"] > 0
+    if result["parameters"]["frames"] >= 450:
+        assert result["fixtures"]["moving_zigzag"]["optimized_submitted_points"] < result["fixtures"]["moving_zigzag"]["legacy_submitted_points"]

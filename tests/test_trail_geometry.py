@@ -142,6 +142,29 @@ def test_trail_margin_prevents_viewport_edge_gaps() -> None:
     assert image.getpixel((options.width - 1, options.height // 2)) != BACKGROUND
 
 
+def test_culls_offscreen_sharp_zigzag_history_and_keeps_visible_turns() -> None:
+    options = _options()
+    screen_points = [
+        (-5_000.0 + index * 4.0, options.height / 2 + (index % 2) * 80.0)
+        for index in range(600)
+    ]
+    screen_points.extend(
+        [
+            (options.width * 0.3, options.height * 0.3),
+            (options.width * 0.5, options.height * 0.7),
+            (options.width * 0.7, options.height * 0.3),
+        ]
+    )
+    world_points, camera_center = _world_points_from_screen(screen_points, options)
+
+    visible = visible_trail_points(world_points, camera_center, options)
+
+    assert len(visible) < 20
+    assert (options.width * 0.3, options.height * 0.3) in visible
+    assert (options.width * 0.5, options.height * 0.7) == pytest.approx(visible[-2])
+    assert visible[-1] == (options.width * 0.7, options.height * 0.3)
+
+
 def test_culling_preserves_an_offscreen_loop_that_crosses_viewport() -> None:
     options = _options()
     screen_points = [

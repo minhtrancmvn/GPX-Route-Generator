@@ -491,7 +491,7 @@ def visible_trail_points(
         world_to_frame(point, camera_center_world, options)
         for point in sample_world_pixels
     ]
-    if len(screen_points) <= 2 or _all_interior_turns_are_sharp(screen_points):
+    if len(screen_points) <= 2:
         return screen_points
 
     margin = float(options.trail_width + 1)
@@ -545,14 +545,6 @@ def _add_safe_culling_indexes(
         safety_indexes.add(midpoint)
         intervals.extend(((start, midpoint), (midpoint, end)))
     return safety_indexes
-
-
-def _all_interior_turns_are_sharp(points: list[tuple[float, float]]) -> bool:
-    """Return whether every interior vertex must remain for trail fidelity."""
-    return all(
-        _is_sharp_turn(points[index - 1], points[index], points[index + 1])
-        for index in range(1, len(points) - 1)
-    )
 
 
 def _segment_intersects_viewport(

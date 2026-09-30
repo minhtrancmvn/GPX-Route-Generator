@@ -39,6 +39,11 @@ def _fixture_world_points(frames: int, fixture: str, options: RenderOptions) -> 
             )
             for index in range(frames)
         ]
+    if fixture == "moving_zigzag":
+        return [
+            (index * 2.0, ((index % 2) * 80.0 - 40.0) / options.scale)
+            for index in range(frames)
+        ]
     raise ValueError(f"Unknown fixture: {fixture}")
 
 
@@ -93,7 +98,7 @@ def _measure_whole_render(
                 world_points,
                 distances,
                 frame_index,
-                (0.0, 0.0),
+                world_points[frame_index],
                 options,
             )
             frame.close()
@@ -105,7 +110,7 @@ def _measure_whole_render(
 def benchmark_trail(*, frames: int) -> dict[str, object]:
     """Compare legacy and optimized complete trail rendering for two fixtures."""
     fixtures: dict[str, dict[str, float | int]] = {}
-    for fixture in ("straight", "zigzag"):
+    for fixture in ("straight", "zigzag", "moving_zigzag"):
         legacy_seconds, legacy_submitted_points = _measure_whole_render(
             frames=frames,
             fixture=fixture,

@@ -128,15 +128,15 @@ PYTHONPATH=src python3 -m benchmarks.benchmark_trail --frames 900
 PYTHONPATH=src python3 -m benchmarks.benchmark_trail --frames 1800
 ```
 
-Environment: Python 3.14.6, macOS 27.0 arm64. No map I/O, metric graphs, or HUD. Each row renders every frame `0..N-1` through `compose_frame` under identical legacy and optimized workloads. `straight` is a nearly collinear fixture; `zigzag` keeps every turn to represent a non-decimable adversarial route.
+Environment: Python 3.14.6, macOS 27.0 arm64. No map I/O, metric graphs, or HUD. Each row renders every frame `0..N-1` through `compose_frame` under identical legacy and optimized workloads. `straight` is nearly collinear. `zigzag` is a dense sharp-turn adversarial route. `moving_zigzag` is a sharp-turn route with camera centered on each current point, proving historical offscreen turns are culled while current visible turns remain.
 
-| Frames | Straight legacy (s) | Straight optimized (s) | Straight legacy / optimized submitted | Zigzag legacy (s) | Zigzag optimized (s) | Zigzag legacy / optimized submitted |
+| Frames | Straight legacy / optimized (s) | Straight legacy / optimized submitted | Zigzag legacy / optimized (s) | Zigzag legacy / optimized submitted | Moving zigzag legacy / optimized (s) | Moving zigzag legacy / optimized submitted |
 |---:|---:|---:|---:|---:|---:|---:|
-| 450 | 0.523911 | 0.420812 | 101,474 / 3,824 | 0.502972 | 0.532605 | 101,474 / 101,474 |
-| 900 | 1.425125 | 1.208893 | 405,449 / 13,978 | 1.466262 | 1.537612 | 405,449 / 405,449 |
-| 1,800 | 4.871557 | 4.326457 | 1,620,899 / 50,341 | 5.142784 | 5.455868 | 1,620,899 / 1,620,899 |
+| 450 | 0.505165 / 0.430765 | 101,474 / 3,824 | 0.511050 / 0.649351 | 101,474 / 101,474 | 0.608216 / 0.597344 | 101,474 / 60,433 |
+| 900 | 1.448453 / 1.145614 | 405,449 / 13,561 | 1.434769 / 1.958974 | 405,449 / 374,074 | 1.914730 / 1.438055 | 405,449 / 134,233 |
+| 1,800 | 4.724249 / 2.975905 | 1,620,899 / 35,161 | 4.768051 / 5.108699 | 1,620,899 / 959,074 | 6.415796 / 3.250767 | 1,620,899 / 281,833 |
 
-Straight routes submit far fewer points across complete renders. Zigzag runs retain all required sharp turns; optimized timings stay within 6.4% of legacy at all sizes, showing no material worst-case regression. Bounded lookahead limits simplification work per input point.
+Viewport selection now runs before sharp-turn preservation. Straight and moving zigzag routes submit far fewer points; dense zigzag retains visible sharp geometry and stays within 36.6% of legacy in worst observed case. Bounded lookahead limits simplification work per input point.
 
 ## Correctness invariants
 
