@@ -56,10 +56,10 @@ Measured on 2026-09-30, macOS 27.0 arm64, Python 3.14.6. Both measurements use d
 | Samples | Camera before (s) | Camera after (s) | Change |
 |---:|---:|---:|---:|
 | 450 | 0.020300 | 0.000724 | -96.43% |
-| 900 | 0.049604 | 0.001346 | -97.29% |
-| 1,800 | 0.185640 | 0.002782 | -98.50% |
+| 900 | 0.049604 | 0.001349 | -97.28% |
+| 1,800 | 0.185640 | 0.002715 | -98.54% |
 
-The optimized 1,800-sample camera time is 2.07x the 900-sample time, below the 2.5x acceptance limit. Preprojected world pixels and monotonic min/max deques retain exact legacy-window bounds in linear time. Antimeridian handling remains out of scope.
+The optimized 1,800-sample camera time is 2.01x the 900-sample time, below the 2.5x acceptance limit. Preprojected world pixels and monotonic min/max deques retain exact legacy-window bounds in linear time. Antimeridian handling remains out of scope.
 
 Mocked-map preview baseline:
 

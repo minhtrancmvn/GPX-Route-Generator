@@ -83,4 +83,4 @@ def test_dynamic_camera_matches_baseline_goldens(
     assert len(states) == len(expected)
     for actual, (expected_zoom, expected_center) in zip(states, expected):
         assert actual.zoom == expected_zoom
-        assert actual.center_world == pytest.approx(expected_center, abs=1e-9)
+        assert actual.center_world == pytest.approx(expected_center, rel=0, abs=1e-9)

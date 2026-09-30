@@ -340,6 +340,25 @@ def _indexed_window_bounds(
             yield min_window_x, min_window_y, max_window_x, max_window_y
 
 
+def _legacy_dynamic_camera_states(
+    points: list[RoutePoint],
+    distances: list[float],
+    window_meters: float,
+    zoom: int,
+) -> list[CameraState]:
+    """Preserve camera behavior for non-monotonic or non-finite distances."""
+    target_states: list[CameraState] = []
+    for index, point in enumerate(points):
+        center = route_center_world_pixel(local_route_window_points(points, distances, index, window_meters), zoom)
+        point_center = lat_lon_to_world_pixel(point.lat, point.lon, zoom)
+        blended_center = (
+            center[0] * 0.45 + point_center[0] * 0.55,
+            center[1] * 0.45 + point_center[1] * 0.55,
+        )
+        target_states.append(CameraState(zoom=zoom, center_world=blended_center))
+    return target_states
+
+
 def dynamic_camera_states(
     points: list[RoutePoint],
     distances: list[float],
@@ -360,17 +379,10 @@ def dynamic_camera_states(
     # Keep a consistent reference-scale zoom. The cached map segment planner
     # widens this only when a route cannot fit within its 12-image cap.
     zoom = max_zoom
-    if any(current < previous for previous, current in zip(distances, distances[1:])):
-        target_states: list[CameraState] = []
-        for index, point in enumerate(points):
-            center = route_center_world_pixel(local_route_window_points(points, distances, index, window_meters), zoom)
-            point_center = lat_lon_to_world_pixel(point.lat, point.lon, zoom)
-            blended_center = (
-                center[0] * 0.45 + point_center[0] * 0.55,
-                center[1] * 0.45 + point_center[1] * 0.55,
-            )
-            target_states.append(CameraState(zoom=zoom, center_world=blended_center))
-        return target_states
+    if not all(math.isfinite(distance) for distance in distances) or any(
+        current < previous for previous, current in zip(distances, distances[1:])
+    ):
+        return _legacy_dynamic_camera_states(points, distances, window_meters, zoom)
 
     pixels = [lat_lon_to_world_pixel(point.lat, point.lon, zoom) for point in points]
     target_states = []
