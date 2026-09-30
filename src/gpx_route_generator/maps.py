@@ -4,6 +4,7 @@ import base64
 import hashlib
 import hmac
 from io import BytesIO
+from threading import Condition, local
 from typing import Protocol
 from urllib.parse import urlencode, urlsplit
 
@@ -31,7 +32,36 @@ class GoogleStaticMapClient:
     def __init__(self, api_key: str, signature_secret: str | None = None) -> None:
         self.api_key = api_key
         self.signature_secret = signature_secret
-        self.session = requests.Session()
+        self._local = local()
+        self._sessions: list[requests.Session] = []
+        self._condition = Condition()
+        self._closed = False
+        self._inflight = 0
+
+    def _session(self) -> requests.Session:
+        session = getattr(self._local, "session", None)
+        if session is not None:
+            with self._condition:
+                if self._closed:
+                    raise RuntimeError("Google Static Map client is closed.")
+            return session
+        with self._condition:
+            if self._closed:
+                raise RuntimeError("Google Static Map client is closed.")
+            session = requests.Session()
+            self._local.session = session
+            self._sessions.append(session)
+        return session
+
+    def close(self) -> None:
+        with self._condition:
+            self._closed = True
+            while self._inflight:
+                self._condition.wait()
+            sessions = self._sessions[:]
+            self._sessions.clear()
+        for session in sessions:
+            session.close()
 
     def fetch(
         self,
@@ -55,9 +85,19 @@ class GoogleStaticMapClient:
         url = f"{self.base_url}?{urlencode(params)}"
         if self.signature_secret:
             url = self._sign_url(url)
-        response = self.session.get(url, timeout=30)
-        response.raise_for_status()
-        return response.content
+        session = self._session()
+        with self._condition:
+            if self._closed:
+                raise RuntimeError("Google Static Map client is closed.")
+            self._inflight += 1
+        try:
+            response = session.get(url, timeout=30)
+            response.raise_for_status()
+            return response.content
+        finally:
+            with self._condition:
+                self._inflight -= 1
+                self._condition.notify_all()
 
     def _sign_url(self, url: str) -> str:
         split = urlsplit(url)
@@ -75,6 +115,9 @@ class SolidColorMapClient:
     def __init__(self, color: tuple[int, int, int] = (232, 237, 242)) -> None:
         self.color = color
         self.requests = 0
+
+    def close(self) -> None:
+        pass
 
     def fetch(
         self,

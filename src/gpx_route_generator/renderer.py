@@ -10,7 +10,7 @@ from dataclasses import replace
 from io import BytesIO
 from pathlib import Path
 from queue import Empty, Full, Queue
-from threading import Event, Thread
+from threading import Event, Lock, Thread
 from time import monotonic
 from typing import BinaryIO
 
@@ -29,6 +29,7 @@ from .models import RenderOptions, RoutePoint, validate_render_options
 ProgressCallback = Callable[[int, int, int], None]
 
 _AVATAR_CACHE: dict[tuple[str, int], Image.Image] = {}
+_AVATAR_CACHE_LOCK = Lock()
 _FRAME_PROGRESS_TIMEOUT_SECONDS = 30.0
 _PROCESS_TERM_GRACE_SECONDS = 2.0
 _READER_JOIN_TIMEOUT_SECONDS = 1.0
@@ -442,20 +443,23 @@ def make_arrow(size: int, avatar_id: str = "mt15") -> Image.Image:
     avatar_path = Path(__file__).parent / f"{avatar_id}.png"
     if avatar_path.exists():
         cache_key = (avatar_id, size)
-        if cache_key not in _AVATAR_CACHE:
-            src = Image.open(avatar_path).convert("RGBA")
-            content_box = src.getchannel("A").getbbox()
-            if content_box is not None:
-                src = src.crop(content_box)
-            # Scale so the long axis (image width = front-to-back) matches size
-            aspect = src.width / src.height
-            new_w = size
-            new_h = max(1, int(size / aspect))
-            scaled = src.resize((new_w, new_h), Image.Resampling.LANCZOS)
-            # Motorcycle faces right in image; rotate 90° CCW so it points up (north)
-            upright = scaled.rotate(90, expand=True, resample=Image.Resampling.BICUBIC)
-            _AVATAR_CACHE[cache_key] = upright
-        return _AVATAR_CACHE[cache_key].copy()
+        with _AVATAR_CACHE_LOCK:
+            if cache_key not in _AVATAR_CACHE:
+                with Image.open(avatar_path) as opened:
+                    src = opened.convert("RGBA")
+                content_box = src.getchannel("A").getbbox()
+                if content_box is not None:
+                    src = src.crop(content_box)
+                # Scale so the long axis (image width = front-to-back) matches size
+                aspect = src.width / src.height
+                new_w = size
+                new_h = max(1, int(size / aspect))
+                scaled = src.resize((new_w, new_h), Image.Resampling.LANCZOS)
+                # Motorcycle faces right in image; rotate 90° CCW so it points up (north)
+                upright = scaled.rotate(90, expand=True, resample=Image.Resampling.BICUBIC)
+                _AVATAR_CACHE[cache_key] = upright
+            cached = _AVATAR_CACHE[cache_key]
+        return cached.copy()
 
     # Fallback: drawn polygon arrow
     image = Image.new("RGBA", (size, size), (0, 0, 0, 0))

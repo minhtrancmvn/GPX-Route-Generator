@@ -73,6 +73,16 @@ async def _read_upload(upload: UploadFile, *, max_bytes: int) -> bytes:
     return b"".join(chunks)
 
 
+def _close_map_client(client: StaticMapClient) -> None:
+    close = getattr(client, "close", None)
+    if close is None:
+        return
+    try:
+        close()
+    except Exception:
+        _log_sanitized_exception("Map client cleanup failed")
+
+
 def default_map_client_factory(settings: Settings) -> StaticMapClient:
     if not settings.google_maps_api_key:
         raise ValueError("Set GOOGLE_MAPS_API_KEY in .env before rendering.")
@@ -345,9 +355,12 @@ def create_app(
             except ValueError as exc:
                 raise HTTPException(status_code=422, detail=str(exc)) from exc
             map_client = app.state.map_client_factory(app.state.settings)
-            image = await run_in_threadpool(
-                render_preview_frame_2d, points, options, map_client
-            )
+            try:
+                image = await run_in_threadpool(
+                    render_preview_frame_2d, points, options, map_client
+                )
+            finally:
+                _close_map_client(map_client)
         except HTTPException:
             raise
         except Exception:
@@ -514,14 +527,17 @@ def run_render_job(
             if job is None:
                 return
             map_client = app.state.map_client_factory(settings)
-            render_route_video(
-                points=points,
-                options=options,
-                output_path=job.output_path,
-                map_client=map_client,
-                ffmpeg_path=settings.ffmpeg_path,
-                progress_callback=update_progress,
-            )
+            try:
+                render_route_video(
+                    points=points,
+                    options=options,
+                    output_path=job.output_path,
+                    map_client=map_client,
+                    ffmpeg_path=settings.ffmpeg_path,
+                    progress_callback=update_progress,
+                )
+            finally:
+                _close_map_client(map_client)
             app.state.jobs.update(
                 job_id,
                 status="completed",
