@@ -4,9 +4,10 @@ Generated on 2026-09-24 from branch `perf-baseline`.
 
 ## Scope
 
-Measurement-only baseline for geometry preparation. No production behavior or
-rendering algorithm changed. Map requests are not made; benchmark uses synthetic
-`RoutePoint` fixtures and pure geometry functions.
+This document begins with the original measurement-only geometry baseline, then
+records three production render-path optimizations: prepared metric graphs,
+linear camera planning, and trail culling/decimation. Benchmarks use synthetic
+routes and in-memory maps; no Google Map requests or FFmpeg encoding are included.
 
 ## Repeatable command
 
@@ -150,9 +151,9 @@ The benchmark intentionally does not assert a runtime threshold. Hardware,
 Python version, and system load vary; optimization acceptance should compare
 scaling and preserve existing camera/render output tests.
 
-## Next measurement
+## Rerun guidance
 
-Before changing `dynamic_camera_states`, capture camera-state golden outputs for
-short routes and edge windows. GitNexus impact shows this function directly
-feeds both preview and final render paths; re-run impact analysis before editing
-it.
+Use the commands in each section on the same machine and Python version when
+comparing future changes. Treat timings as observations, not universal budgets.
+Camera goldens, metric parity tests, and trail geometry tests remain the
+correctness gates for subsequent renderer work.

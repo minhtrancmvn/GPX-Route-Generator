@@ -60,7 +60,7 @@ def _measure_whole_render(
     frames: int,
     fixture: str,
     optimized: bool,
-) -> tuple[float, int]:
+) -> tuple[float, int, list[tuple[float, float]]]:
     options = _options(frames)
     started_at = datetime(2024, 1, 1, tzinfo=timezone.utc)
     samples = [
@@ -71,6 +71,7 @@ def _measure_whole_render(
     distances = [float(index) for index in range(frames)]
     map_image = Image.new("RGBA", (options.width, options.height), (232, 237, 242, 255))
     submitted_points = 0
+    final_points: list[tuple[float, float]] = []
     point_builder = visible_trail_points if optimized else _legacy_trail_points
 
     def measured_draw_trail(
@@ -80,13 +81,15 @@ def _measure_whole_render(
         camera_center_world: tuple[float, float],
         render_options: RenderOptions,
     ) -> None:
-        nonlocal submitted_points
+        nonlocal final_points, submitted_points
         if frame_index <= 0:
             return
         points = point_builder(
             sample_world_pixels[: frame_index + 1], camera_center_world, render_options
         )
         submitted_points += len(points)
+        if frame_index == frames - 1:
+            final_points = points
         draw.line(points, fill=(255, 47, 47, 224), width=render_options.trail_width, joint="curve")
 
     started = perf_counter()
@@ -104,28 +107,35 @@ def _measure_whole_render(
             frame.close()
     elapsed = perf_counter() - started
     map_image.close()
-    return elapsed, submitted_points
+    return elapsed, submitted_points, final_points
 
 
 def benchmark_trail(*, frames: int) -> dict[str, object]:
     """Compare legacy and optimized complete trail rendering for two fixtures."""
     fixtures: dict[str, dict[str, float | int]] = {}
     for fixture in ("straight", "zigzag", "moving_zigzag"):
-        legacy_seconds, legacy_submitted_points = _measure_whole_render(
+        legacy_seconds, legacy_submitted_points, _ = _measure_whole_render(
             frames=frames,
             fixture=fixture,
             optimized=False,
         )
-        optimized_seconds, optimized_submitted_points = _measure_whole_render(
+        optimized_seconds, optimized_submitted_points, optimized_final_points = _measure_whole_render(
             frames=frames,
             fixture=fixture,
             optimized=True,
         )
+        options = _options(frames)
+        world_points = _fixture_world_points(frames, fixture, options)
+        camera_center = world_points[-1]
+        expected_first = world_to_frame(world_points[0], camera_center, options)
+        expected_latest = world_to_frame(world_points[-1], camera_center, options)
         fixtures[fixture] = {
             "legacy_seconds": legacy_seconds,
             "optimized_seconds": optimized_seconds,
             "legacy_submitted_points": legacy_submitted_points,
             "optimized_submitted_points": optimized_submitted_points,
+            "first_point_preserved": expected_first in optimized_final_points,
+            "latest_point_preserved": expected_latest in optimized_final_points,
         }
     return {
         "environment": {
@@ -138,8 +148,8 @@ def benchmark_trail(*, frames: int) -> dict[str, object]:
         "correctness": {
             "submitted_point_count": fixtures["straight"]["optimized_submitted_points"],
             "source_point_count": frames,
-            "first_point_preserved": True,
-            "latest_point_preserved": True,
+            "first_point_preserved": fixtures["straight"]["first_point_preserved"],
+            "latest_point_preserved": fixtures["straight"]["latest_point_preserved"],
         },
     }
 
