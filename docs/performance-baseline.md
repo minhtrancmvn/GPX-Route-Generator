@@ -118,6 +118,26 @@ PYTHONPATH=src python3 -m benchmarks.benchmark_metrics --graph-only --frames 180
 
 Asset preparation runs once per preview or video. Static panel, grid, line, and font assets are reused for every frame; dynamic cursor and marker work remains per-frame. Pixel parity tests cover first/last frames plus trail/avatar overlap in landscape and portrait.
 
+## Trail culling and decimation
+
+Run from repository root using worktree source when no local editable install exists:
+
+```bash
+PYTHONPATH=src python3 -m benchmarks.benchmark_trail --frames 450
+PYTHONPATH=src python3 -m benchmarks.benchmark_trail --frames 900
+PYTHONPATH=src python3 -m benchmarks.benchmark_trail --frames 1800
+```
+
+Environment: Python 3.14.6, macOS 27.0 arm64. No map I/O, metric graphs, or HUD. Each row renders every frame `0..N-1` through `compose_frame` under identical legacy and optimized workloads. `straight` is nearly collinear. `zigzag` is a dense sharp-turn adversarial route. `moving_zigzag` is a sharp-turn route with camera centered on each current point, proving historical offscreen turns are culled while current visible turns remain.
+
+| Frames | Straight legacy / optimized (s) | Straight legacy / optimized submitted | Zigzag legacy / optimized (s) | Zigzag legacy / optimized submitted | Moving zigzag legacy / optimized (s) | Moving zigzag legacy / optimized submitted |
+|---:|---:|---:|---:|---:|---:|---:|
+| 450 | 0.505165 / 0.430765 | 101,474 / 3,824 | 0.511050 / 0.649351 | 101,474 / 101,474 | 0.608216 / 0.597344 | 101,474 / 60,433 |
+| 900 | 1.448453 / 1.145614 | 405,449 / 13,561 | 1.434769 / 1.958974 | 405,449 / 374,074 | 1.914730 / 1.438055 | 405,449 / 134,233 |
+| 1,800 | 4.724249 / 2.975905 | 1,620,899 / 35,161 | 4.768051 / 5.108699 | 1,620,899 / 959,074 | 6.415796 / 3.250767 | 1,620,899 / 281,833 |
+
+Viewport selection now runs before sharp-turn preservation. Straight and moving zigzag routes submit far fewer points; dense zigzag retains visible sharp geometry and stays within 36.6% of legacy in worst observed case. Bounded lookahead limits simplification work per input point.
+
 ## Correctness invariants
 
 Every benchmark result must report:

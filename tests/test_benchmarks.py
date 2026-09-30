@@ -4,6 +4,7 @@ import json
 
 from benchmarks.benchmark_geometry import benchmark_geometry
 from benchmarks.benchmark_preview import benchmark_preview
+from benchmarks.benchmark_trail import benchmark_trail
 from benchmarks.fixtures import make_route
 
 
@@ -52,3 +53,22 @@ def test_preview_benchmark_reports_map_requests_and_output_size() -> None:
     assert result["correctness"]["height"] == 720
     assert result["timings_seconds"]["preview"] >= 0
     assert result["output_bytes"] > 0
+
+
+def test_trail_benchmark_reports_composition_and_decimated_submission() -> None:
+    result = benchmark_trail(frames=24)
+
+    assert result["parameters"] == {"frames": 24}
+    assert result["timings_seconds"]["compose_frame"] >= 0
+    assert result["correctness"]["source_point_count"] == 24
+    assert result["correctness"]["submitted_point_count"] < 24 * 24
+    assert result["correctness"]["first_point_preserved"]
+    assert result["correctness"]["latest_point_preserved"]
+    assert set(result["fixtures"]) == {"straight", "zigzag", "moving_zigzag"}
+    for fixture in result["fixtures"].values():
+        assert fixture["legacy_seconds"] >= 0
+        assert fixture["optimized_seconds"] >= 0
+        assert fixture["legacy_submitted_points"] > 0
+        assert fixture["optimized_submitted_points"] > 0
+    if result["parameters"]["frames"] >= 450:
+        assert result["fixtures"]["moving_zigzag"]["optimized_submitted_points"] < result["fixtures"]["moving_zigzag"]["legacy_submitted_points"]

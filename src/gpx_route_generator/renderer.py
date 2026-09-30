@@ -8,6 +8,7 @@ from concurrent.futures import Future, ThreadPoolExecutor, as_completed
 from contextlib import suppress
 from dataclasses import dataclass, replace
 from io import BytesIO
+from math import hypot
 from pathlib import Path
 from queue import Empty, Full, Queue
 from threading import Event, Lock, Thread
@@ -39,6 +40,7 @@ _FRAME_PROGRESS_TIMEOUT_SECONDS = 30.0
 _PROCESS_TERM_GRACE_SECONDS = 2.0
 _READER_JOIN_TIMEOUT_SECONDS = 1.0
 _STDERR_TAIL_BYTES = 1200
+_TRAIL_DECIMATION_LOOKAHEAD = 32
 
 
 class _FfmpegLifecycleError(RuntimeError):
@@ -473,11 +475,184 @@ def draw_trail(
     if frame_index <= 0:
         return
     color = parse_hex_color(options.trail_color, alpha=224)
-    points = [
-        world_to_frame(point, camera_center_world, options)
-        for point in sample_world_pixels[: frame_index + 1]
-    ]
+    points = visible_trail_points(
+        sample_world_pixels[: frame_index + 1], camera_center_world, options
+    )
     draw.line(points, fill=color, width=options.trail_width, joint="curve")
+
+
+def visible_trail_points(
+    sample_world_pixels: list[tuple[float, float]],
+    camera_center_world: tuple[float, float],
+    options: RenderOptions,
+) -> list[tuple[float, float]]:
+    """Return ordered screen-space trail points needed for current viewport."""
+    screen_points = [
+        world_to_frame(point, camera_center_world, options)
+        for point in sample_world_pixels
+    ]
+    if len(screen_points) <= 2:
+        return screen_points
+
+    margin = float(options.trail_width + 1)
+    viewport = (-margin, -margin, options.width + margin, options.height + margin)
+    kept_indexes = {0, len(screen_points) - 1}
+    protected_source_indexes = set(kept_indexes)
+    for index in range(1, len(screen_points)):
+        previous = screen_points[index - 1]
+        current = screen_points[index]
+        if not _segment_intersects_viewport(previous, current, viewport):
+            continue
+        kept_indexes.update((index - 1, index))
+        if not _point_in_viewport(previous, viewport) or not _point_in_viewport(current, viewport):
+            protected_source_indexes.update((index - 1, index))
+
+    safety_indexes = _add_safe_culling_indexes(screen_points, kept_indexes, viewport)
+    protected_source_indexes.update(safety_indexes)
+    candidate_indexes = sorted(kept_indexes)
+    candidate_points = [screen_points[index] for index in candidate_indexes]
+    protected_indexes = _protected_trail_indexes(candidate_points)
+    protected_indexes.update(
+        index
+        for index, source_index in enumerate(candidate_indexes)
+        if source_index in protected_source_indexes
+    )
+    return _decimate_trail_points(candidate_points, protected_indexes)
+
+
+def _point_in_viewport(
+    point: tuple[float, float], viewport: tuple[float, float, float, float]
+) -> bool:
+    """Return whether point is inside inclusive viewport bounds."""
+    left, top, right, bottom = viewport
+    return left <= point[0] <= right and top <= point[1] <= bottom
+
+
+def _add_safe_culling_indexes(
+    points: list[tuple[float, float]],
+    kept_indexes: set[int],
+    viewport: tuple[float, float, float, float],
+) -> set[int]:
+    """Retain off-screen split points when a culling chord would cross viewport."""
+    safety_indexes: set[int] = set()
+    intervals = list(zip(sorted(kept_indexes), sorted(kept_indexes)[1:]))
+    while intervals:
+        start, end = intervals.pop()
+        if end - start <= 1 or not _segment_intersects_viewport(points[start], points[end], viewport):
+            continue
+        midpoint = (start + end) // 2
+        kept_indexes.add(midpoint)
+        safety_indexes.add(midpoint)
+        intervals.extend(((start, midpoint), (midpoint, end)))
+    return safety_indexes
+
+
+def _segment_intersects_viewport(
+    start: tuple[float, float],
+    end: tuple[float, float],
+    viewport: tuple[float, float, float, float],
+) -> bool:
+    """Return whether line segment intersects inclusive viewport bounds."""
+    left, top, right, bottom = viewport
+    start_x, start_y = start
+    delta_x = end[0] - start_x
+    delta_y = end[1] - start_y
+    lower = 0.0
+    upper = 1.0
+    for direction, offset in (
+        (-delta_x, start_x - left),
+        (delta_x, right - start_x),
+        (-delta_y, start_y - top),
+        (delta_y, bottom - start_y),
+    ):
+        if direction == 0:
+            if offset < 0:
+                return False
+            continue
+        ratio = offset / direction
+        if direction < 0:
+            if ratio > upper:
+                return False
+            lower = max(lower, ratio)
+        else:
+            if ratio < lower:
+                return False
+            upper = min(upper, ratio)
+    return True
+
+
+def _protected_trail_indexes(points: list[tuple[float, float]]) -> set[int]:
+    """Return endpoints, repeated crossing points, and sharp-turn point indexes."""
+    protected = {0, len(points) - 1}
+    seen: dict[tuple[float, float], int] = {}
+    for index, point in enumerate(points):
+        previous_index = seen.get(point)
+        if previous_index is not None:
+            protected.update((previous_index, index))
+        seen[point] = index
+
+    for index in range(1, len(points) - 1):
+        if _is_sharp_turn(points[index - 1], points[index], points[index + 1]):
+            protected.add(index)
+    return protected
+
+
+def _is_sharp_turn(
+    previous: tuple[float, float],
+    current: tuple[float, float],
+    following: tuple[float, float],
+) -> bool:
+    """Return whether a vertex changes direction by at least thirty degrees."""
+    first_x = current[0] - previous[0]
+    first_y = current[1] - previous[1]
+    second_x = following[0] - current[0]
+    second_y = following[1] - current[1]
+    first_length = hypot(first_x, first_y)
+    second_length = hypot(second_x, second_y)
+    if first_length == 0 or second_length == 0:
+        return True
+    cosine = (first_x * second_x + first_y * second_y) / (first_length * second_length)
+    return cosine <= 0.8660254037844386
+
+
+def _decimate_trail_points(
+    points: list[tuple[float, float]], protected_indexes: set[int]
+) -> list[tuple[float, float]]:
+    """Remove only points within one pixel of bounded screen-space chords."""
+    retained = set(protected_indexes)
+    boundaries = sorted(protected_indexes)
+    for start, end in zip(boundaries, boundaries[1:]):
+        _retain_bounded_deviation_points(points, start, end, retained)
+    return [point for index, point in enumerate(points) if index in retained]
+
+
+def _retain_bounded_deviation_points(
+    points: list[tuple[float, float]], start: int, end: int, retained: set[int]
+) -> None:
+    """Use fixed-lookahead chords to bound decimation work to O(points)."""
+    anchor = start
+    while anchor < end:
+        candidate = min(anchor + _TRAIL_DECIMATION_LOOKAHEAD, end)
+        if any(
+            _perpendicular_deviation(points[index], points[anchor], points[candidate]) > 1.0
+            for index in range(anchor + 1, candidate)
+        ):
+            retained.update(range(anchor + 1, candidate + 1))
+        else:
+            retained.add(candidate)
+        anchor = candidate
+
+
+def _perpendicular_deviation(
+    point: tuple[float, float], start: tuple[float, float], end: tuple[float, float]
+) -> float:
+    """Return perpendicular distance from point to infinite line through segment."""
+    delta_x = end[0] - start[0]
+    delta_y = end[1] - start[1]
+    length = hypot(delta_x, delta_y)
+    if length == 0:
+        return hypot(point[0] - start[0], point[1] - start[1])
+    return abs(delta_x * (start[1] - point[1]) - (start[0] - point[0]) * delta_y) / length
 
 
 def draw_arrow(
