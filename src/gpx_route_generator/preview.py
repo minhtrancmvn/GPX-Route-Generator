@@ -1,4 +1,5 @@
 """Single-frame preview rendering."""
+
 from __future__ import annotations
 
 from dataclasses import replace
@@ -10,7 +11,7 @@ from .geo import dynamic_camera_states, lat_lon_to_world_pixel, resample_by_dist
 from .map_segments import build_map_segment_plan, prepare_segment_frame
 from .maps import StaticMapClient
 from .models import RenderOptions, RoutePoint
-from .renderer import compose_frame
+from .renderer import compose_frame, prepare_metric_graphs
 
 
 def render_preview_frame_2d(
@@ -30,6 +31,7 @@ def render_preview_frame_2d(
         fps=options.fps,
     )
     plan = build_map_segment_plan(camera_states, options)
+    prepared_metric_graphs = prepare_metric_graphs(samples, sample_distances, options)
     camera_state = plan.camera_states[0]
     render_options = replace(options, zoom=camera_state.zoom)
     sample_world_pixels = [
@@ -47,7 +49,9 @@ def render_preview_frame_2d(
     )
     source_image = Image.open(BytesIO(map_bytes)).convert("RGBA")
     try:
-        prepared_map = prepare_segment_frame(source_image, segment, camera_state, render_options)
+        prepared_map = prepare_segment_frame(
+            source_image, segment, camera_state, render_options
+        )
         frame = compose_frame(
             map_bytes=prepared_map,
             samples=samples,
@@ -56,6 +60,7 @@ def render_preview_frame_2d(
             frame_index=0,
             camera_center_world=camera_state.center_world,
             options=render_options,
+            prepared_metric_graphs=prepared_metric_graphs,
         )
         return frame.convert("RGB")
     finally:

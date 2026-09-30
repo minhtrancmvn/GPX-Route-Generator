@@ -1,14 +1,13 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from io import BytesIO
 
-from PIL import Image
+from PIL import Image, ImageDraw
 
 from gpx_route_generator.geo import lat_lon_to_world_pixel
 from gpx_route_generator.models import RenderOptions, RoutePoint
-from gpx_route_generator.renderer import compose_frame, make_arrow
-
+from gpx_route_generator.renderer import compose_frame, draw_metric_graph, make_arrow
 
 BACKGROUND = (232, 237, 242)
 
@@ -21,13 +20,16 @@ def make_map_bytes(options: RenderOptions) -> bytes:
 
 
 def make_route() -> tuple[list[RoutePoint], list[tuple[float, float]], list[float]]:
-    start = datetime(2024, 1, 1, tzinfo=timezone.utc)
+    start = datetime(2024, 1, 1, tzinfo=UTC)
     samples = [
         RoutePoint(37.0000, -122.0000, elevation=10, time=start),
         RoutePoint(37.0004, -122.0004, elevation=26, time=start + timedelta(seconds=5)),
         RoutePoint(37.0007, -122.0007, elevation=18, time=start + timedelta(seconds=9)),
     ]
-    pixels = [lat_lon_to_world_pixel(sample.lat, sample.lon, RenderOptions().zoom) for sample in samples]
+    pixels = [
+        lat_lon_to_world_pixel(sample.lat, sample.lon, RenderOptions().zoom)
+        for sample in samples
+    ]
     distances = [0.0, 60.0, 115.0]
     return samples, pixels, distances
 
@@ -61,10 +63,12 @@ def test_avatar_size_scales_visible_sprite() -> None:
     large_long_axis = max(large[2] - large[0], large[3] - large[1])
     assert large_long_axis > small_long_axis * 3
 
+
 def test_default_avatar_renders_blob_icon() -> None:
     image = make_arrow(54, "default")
     assert image.size == (54, 54)
     assert image.getchannel("A").getbbox() is not None
+
 
 def test_distance_badge_uses_fixed_top_left_hud_position() -> None:
     options = RenderOptions(
@@ -88,6 +92,7 @@ def test_distance_badge_uses_fixed_top_left_hud_position() -> None:
     y = max(28, int(options.width * 0.045)) + max(10, int(options.height * 0.014)) + 6
     assert image.getpixel((x, y)) != BACKGROUND
 
+
 def test_speed_and_elevation_graphs_split_bottom_area() -> None:
     image = render_graph_frame(show_speed=True, show_elevation=True)
     y = image.height - 72
@@ -102,6 +107,23 @@ def test_single_metric_graph_uses_full_width_bottom_area() -> None:
     y = image.height - 72
 
     assert image.getpixel((image.width // 2, y)) != BACKGROUND
+
+
+def test_draw_metric_graph_keeps_empty_series_baseline() -> None:
+    options = RenderOptions(show_distance=False, show_progress_bar=False)
+    overlay = Image.new("RGBA", (options.width, options.height), (0, 0, 0, 0))
+
+    draw_metric_graph(
+        ImageDraw.Draw(overlay),
+        (20.0, 500.0, 400.0, 650.0),
+        "Speed",
+        [],
+        0,
+        (63, 146, 255, 245),
+        options,
+    )
+
+    assert overlay.getbbox() is not None
 
 
 def test_no_metric_graph_leaves_bottom_area_clear() -> None:
