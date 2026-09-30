@@ -62,10 +62,18 @@ class PreparedMetricGraph:
 
 @dataclass(frozen=True)
 class PreparedMetricGraphs:
-    """Immutable static layer and per-series assets for frame composition."""
+    """Immutable static graph assets for frame composition."""
 
     graphs: tuple[PreparedMetricGraph, ...]
     static_layer: Image.Image
+    static_coverage: Image.Image
+
+
+class _UnpreparedMetricGraphs:
+    """Marker for callers that require legacy per-frame graph rendering."""
+
+
+_UNPREPARED_METRIC_GRAPHS = _UnpreparedMetricGraphs()
 
 
 def _frame_worker_count() -> int:
@@ -416,7 +424,9 @@ def compose_frame(
     frame_index: int,
     camera_center_world: tuple[float, float],
     options: RenderOptions,
-    prepared_metric_graphs: PreparedMetricGraphs | None = None,
+    prepared_metric_graphs: PreparedMetricGraphs
+    | None
+    | _UnpreparedMetricGraphs = _UNPREPARED_METRIC_GRAPHS,
 ) -> Image.Image:
     frame = (
         map_bytes.copy()
@@ -435,12 +445,22 @@ def compose_frame(
     )
     if options.show_progress_bar:
         draw_progress_bar(draw, frame_index, options)
-    if prepared_metric_graphs is None:
+    if prepared_metric_graphs is _UNPREPARED_METRIC_GRAPHS:
         draw_metric_graphs(draw, samples, sample_distances, frame_index, options)
-    else:
-        overlay.alpha_composite(prepared_metric_graphs.static_layer)
+    elif prepared_metric_graphs is not None:
+        _replace_static_graph_pixels(overlay, prepared_metric_graphs)
         draw_prepared_metric_graph_markers(draw, prepared_metric_graphs, frame_index)
     return Image.alpha_composite(frame, overlay)
+
+
+def _replace_static_graph_pixels(
+    overlay: Image.Image, prepared_metric_graphs: PreparedMetricGraphs
+) -> None:
+    """Replace graph pixels using legacy ImageDraw overwrite semantics."""
+    overlay.paste(
+        prepared_metric_graphs.static_layer,
+        mask=prepared_metric_graphs.static_coverage,
+    )
 
 
 def draw_trail(
@@ -615,8 +635,16 @@ def prepare_metric_graphs(
             metrics, _metric_graph_bounds(len(metrics), options), strict=True
         )
     )
+    static_coverage = static_layer.getchannel("A").point(
+        lambda alpha: 255 if alpha else 0
+    )
     static_layer.readonly = 1
-    return PreparedMetricGraphs(graphs=graphs, static_layer=static_layer)
+    static_coverage.readonly = 1
+    return PreparedMetricGraphs(
+        graphs=graphs,
+        static_layer=static_layer,
+        static_coverage=static_coverage,
+    )
 
 
 def _available_metrics(

@@ -64,7 +64,11 @@ grows superlinearly while map requests remain fixed at one.
 
 ## Metric graph preparation — Task 1
 
-Measured on 2026-09-30, macOS 27.0 arm64, Python 3.14.6. The deterministic benchmark renders every frame over an in-memory RGBA map with speed and elevation enabled. `--unprepared` is the old per-frame graph path; default uses `PreparedMetricGraphs`.
+Measured on 2026-09-30, macOS 27.0 arm64, Python 3.14.6. `--unprepared` uses legacy per-frame graph work; default reuses `PreparedMetricGraphs`. Both modes rendered two graphs for requested frame counts and produced byte-identical final PNG frames.
+
+### Whole-frame render loop
+
+This benchmark includes map-image copying, trail drawing, avatar drawing, graph rendering, and final image composition. It measures end-to-end frame work, not isolated graph cost.
 
 ```bash
 PYTHONPATH=src python3 -m benchmarks.benchmark_metrics --frames 450 --unprepared
@@ -75,13 +79,32 @@ PYTHONPATH=src python3 -m benchmarks.benchmark_metrics --frames 900
 PYTHONPATH=src python3 -m benchmarks.benchmark_metrics --frames 1800
 ```
 
-| Frames | Before graph composition (s) | After preparation (s) | After graph composition (s) | Composition change |
+| Frames | Legacy whole-frame (s) | Prepared assets (s) | Prepared whole-frame (s) | Loop change |
 |---:|---:|---:|---:|---:|
-| 450 | 1.476537 | 0.002320 | 1.141262 | -22.71% |
-| 900 | 3.737200 | 0.002624 | 2.898358 | -22.45% |
-| 1,800 | 11.150574 | 0.003409 | 7.813747 | -29.03% |
+| 450 | 1.485014 | 0.003017 | 1.236942 | -16.71% |
+| 900 | 4.012363 | 0.003485 | 2.921558 | -27.19% |
+| 1,800 | 11.642951 | 0.004091 | 7.567435 | -35.01% |
 
-Both modes rendered two graphs and requested frame counts. Asset preparation is reported separately because it runs once per preview/video, then frame composition reuses static panel, grid, line, and font assets. PNG byte totals differ because prepared static layers composite before dynamic cursor/marker state; pixel parity is covered for first, last, landscape, and portrait graph frames.
+### Graph-only render loop
+
+This benchmark excludes map copying, trail drawing, avatar drawing, and final frame composition. It draws only graph assets and dynamic graph markers into a transparent overlay.
+
+```bash
+PYTHONPATH=src python3 -m benchmarks.benchmark_metrics --graph-only --frames 450 --unprepared
+PYTHONPATH=src python3 -m benchmarks.benchmark_metrics --graph-only --frames 900 --unprepared
+PYTHONPATH=src python3 -m benchmarks.benchmark_metrics --graph-only --frames 1800 --unprepared
+PYTHONPATH=src python3 -m benchmarks.benchmark_metrics --graph-only --frames 450
+PYTHONPATH=src python3 -m benchmarks.benchmark_metrics --graph-only --frames 900
+PYTHONPATH=src python3 -m benchmarks.benchmark_metrics --graph-only --frames 1800
+```
+
+| Frames | Legacy graph-only (s) | Prepared assets (s) | Prepared graph-only (s) | Loop change |
+|---:|---:|---:|---:|---:|
+| 450 | 0.636101 | 0.003545 | 0.353052 | -44.50% |
+| 900 | 1.660019 | 0.003363 | 0.705296 | -57.51% |
+| 1,800 | 4.676300 | 0.004040 | 1.409449 | -69.86% |
+
+Asset preparation runs once per preview or video. Static panel, grid, line, and font assets are reused for every frame; dynamic cursor and marker work remains per-frame. Pixel parity tests cover first/last frames plus trail/avatar overlap in landscape and portrait.
 
 ## Correctness invariants
 
