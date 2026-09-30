@@ -62,6 +62,27 @@ is the dominant measured geometry stage and grows superlinearly across this
 matrix, matching the source review's O(sample_count²) finding. Preview also
 grows superlinearly while map requests remain fixed at one.
 
+## Metric graph preparation — Task 1
+
+Measured on 2026-09-30, macOS 27.0 arm64, Python 3.14.6. The deterministic benchmark renders every frame over an in-memory RGBA map with speed and elevation enabled. `--unprepared` is the old per-frame graph path; default uses `PreparedMetricGraphs`.
+
+```bash
+PYTHONPATH=src python3 -m benchmarks.benchmark_metrics --frames 450 --unprepared
+PYTHONPATH=src python3 -m benchmarks.benchmark_metrics --frames 900 --unprepared
+PYTHONPATH=src python3 -m benchmarks.benchmark_metrics --frames 1800 --unprepared
+PYTHONPATH=src python3 -m benchmarks.benchmark_metrics --frames 450
+PYTHONPATH=src python3 -m benchmarks.benchmark_metrics --frames 900
+PYTHONPATH=src python3 -m benchmarks.benchmark_metrics --frames 1800
+```
+
+| Frames | Before graph composition (s) | After preparation (s) | After graph composition (s) | Composition change |
+|---:|---:|---:|---:|---:|
+| 450 | 1.476537 | 0.002320 | 1.141262 | -22.71% |
+| 900 | 3.737200 | 0.002624 | 2.898358 | -22.45% |
+| 1,800 | 11.150574 | 0.003409 | 7.813747 | -29.03% |
+
+Both modes rendered two graphs and requested frame counts. Asset preparation is reported separately because it runs once per preview/video, then frame composition reuses static panel, grid, line, and font assets. PNG byte totals differ because prepared static layers composite before dynamic cursor/marker state; pixel parity is covered for first, last, landscape, and portrait graph frames.
+
 ## Correctness invariants
 
 Every benchmark result must report:

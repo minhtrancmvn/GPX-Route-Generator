@@ -6,7 +6,7 @@ import subprocess
 from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor, as_completed
 from contextlib import suppress
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from io import BytesIO
 from pathlib import Path
 from queue import Empty, Full, Queue
@@ -22,7 +22,12 @@ from .geo import (
     lat_lon_to_world_pixel,
     resample_by_distance,
 )
-from .map_segments import MapSegment, MapSegmentPlan, build_map_segment_plan, prepare_segment_frame
+from .map_segments import (
+    MapSegment,
+    MapSegmentPlan,
+    build_map_segment_plan,
+    prepare_segment_frame,
+)
 from .maps import StaticMapClient
 from .models import RenderOptions, RoutePoint, validate_render_options
 
@@ -38,6 +43,29 @@ _STDERR_TAIL_BYTES = 1200
 
 class _FfmpegLifecycleError(RuntimeError):
     """Raised when FFmpeg cannot receive rendered frames safely."""
+
+
+@dataclass(frozen=True)
+class PreparedMetricGraph:
+    """Immutable geometry and styling for one rendered metric graph."""
+
+    label: str
+    color: tuple[int, int, int, int]
+    bounds: tuple[float, float, float, float]
+    chart_bounds: tuple[float, float, float, float]
+    points: tuple[tuple[float, float] | None, ...]
+    segments: tuple[tuple[tuple[float, float], ...], ...]
+    minimum: float
+    maximum: float
+    font: ImageFont.FreeTypeFont | ImageFont.ImageFont
+
+
+@dataclass(frozen=True)
+class PreparedMetricGraphs:
+    """Immutable static layer and per-series assets for frame composition."""
+
+    graphs: tuple[PreparedMetricGraph, ...]
+    static_layer: Image.Image
 
 
 def _frame_worker_count() -> int:
@@ -87,7 +115,9 @@ def _prefetch_segment_images(
             except Exception as exc:
                 for image in images.values():
                     image.close()
-                raise RuntimeError(f"Google Static Map segment {segment.id} could not be fetched.") from exc
+                raise RuntimeError(
+                    f"Google Static Map segment {segment.id} could not be fetched."
+                ) from exc
     return images
 
 
@@ -100,11 +130,14 @@ def _render_video_frame(
     plan: MapSegmentPlan,
     segment_images: dict[int, Image.Image],
     options: RenderOptions,
+    prepared_metric_graphs: PreparedMetricGraphs | None,
 ) -> bytes:
     camera_state = plan.camera_states[index]
     render_options = replace(options, zoom=camera_state.zoom)
     segment = plan.segment_for_frame(index)
-    prepared_map = prepare_segment_frame(segment_images[segment.id], segment, camera_state, render_options)
+    prepared_map = prepare_segment_frame(
+        segment_images[segment.id], segment, camera_state, render_options
+    )
     frame = compose_frame(
         map_bytes=prepared_map,
         samples=samples,
@@ -113,6 +146,7 @@ def _render_video_frame(
         frame_index=index,
         camera_center_world=camera_state.center_world,
         options=render_options,
+        prepared_metric_graphs=prepared_metric_graphs,
     )
     return frame.convert("RGB").tobytes()
 
@@ -178,7 +212,9 @@ def _write_frames(
                 if count is None:
                     count = len(view)
                 if count <= 0:
-                    raise _FfmpegLifecycleError("ffmpeg stdin closed during frame write")
+                    raise _FfmpegLifecycleError(
+                        "ffmpeg stdin closed during frame write"
+                    )
                 view = view[count:]
             written.put(frame_index)
             frame_index += 1
@@ -210,6 +246,7 @@ def render_route_video(
         fps=options.fps,
     )
     plan = build_map_segment_plan(camera_states, options)
+    prepared_metric_graphs = prepare_metric_graphs(samples, sample_distances, options)
     sample_world_pixels = [
         lat_lon_to_world_pixel(sample.lat, sample.lon, plan.camera_states[0].zoom)
         for sample in samples
@@ -217,7 +254,9 @@ def render_route_video(
     segment_images = _prefetch_segment_images(plan, options, map_client)
     map_requests = plan.map_request_count
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    partial_path = output_path.with_name(f".{output_path.stem}.partial{output_path.suffix}")
+    partial_path = output_path.with_name(
+        f".{output_path.stem}.partial{output_path.suffix}"
+    )
     _remove_partial_output(partial_path)
     command = [
         ffmpeg_path,
@@ -271,7 +310,9 @@ def render_route_video(
     frames: Queue[bytes | BaseException | None] = Queue(maxsize=worker_count)
     written: Queue[int | BaseException] = Queue()
     stop = Event()
-    writer = Thread(target=_write_frames, args=(process.stdin, frames, written, stop), daemon=True)
+    writer = Thread(
+        target=_write_frames, args=(process.stdin, frames, written, stop), daemon=True
+    )
     writer.start()
     executor = ThreadPoolExecutor(max_workers=worker_count)
     pending: dict[int, Future[bytes]] = {}
@@ -280,6 +321,7 @@ def render_route_video(
     completed_writes = 0
     failed = True
     try:
+
         def submit_frame(index: int) -> None:
             pending[index] = executor.submit(
                 _render_video_frame,
@@ -290,6 +332,7 @@ def render_route_video(
                 plan=plan,
                 segment_images=segment_images,
                 options=options,
+                prepared_metric_graphs=prepared_metric_graphs,
             )
 
         while next_submit < min(worker_count, options.frame_count):
@@ -305,15 +348,21 @@ def render_route_video(
                 raise result
             if isinstance(result, int):
                 if result != completed_writes:
-                    raise _FfmpegLifecycleError("ffmpeg frame writer completed frames out of order")
+                    raise _FfmpegLifecycleError(
+                        "ffmpeg frame writer completed frames out of order"
+                    )
                 completed_writes += 1
                 deadline = monotonic() + _FRAME_PROGRESS_TIMEOUT_SECONDS
                 if progress_callback:
-                    progress_callback(completed_writes, options.frame_count, map_requests)
+                    progress_callback(
+                        completed_writes, options.frame_count, map_requests
+                    )
             future = pending.get(next_enqueue)
             if future is not None and future.done():
                 try:
-                    frames.put(future.result(), timeout=max(0.0, deadline - monotonic()))
+                    frames.put(
+                        future.result(), timeout=max(0.0, deadline - monotonic())
+                    )
                 except Full as exc:
                     raise _FfmpegLifecycleError("ffmpeg frame write timed out") from exc
                 del pending[next_enqueue]
@@ -323,7 +372,9 @@ def render_route_video(
                     next_submit += 1
                 continue
             if monotonic() >= deadline:
-                raise _FfmpegLifecycleError("ffmpeg frame production or write timed out")
+                raise _FfmpegLifecycleError(
+                    "ffmpeg frame production or write timed out"
+                )
             stop.wait(0.005)
         try:
             frames.put(None, timeout=max(0.0, deadline - monotonic()))
@@ -365,8 +416,13 @@ def compose_frame(
     frame_index: int,
     camera_center_world: tuple[float, float],
     options: RenderOptions,
+    prepared_metric_graphs: PreparedMetricGraphs | None = None,
 ) -> Image.Image:
-    frame = map_bytes.copy() if isinstance(map_bytes, Image.Image) else Image.open(BytesIO(map_bytes)).convert("RGBA")
+    frame = (
+        map_bytes.copy()
+        if isinstance(map_bytes, Image.Image)
+        else Image.open(BytesIO(map_bytes)).convert("RGBA")
+    )
     if frame.size != (options.width, options.height):
         frame = frame.resize((options.width, options.height), Image.Resampling.LANCZOS)
     overlay = Image.new("RGBA", frame.size, (0, 0, 0, 0))
@@ -374,10 +430,16 @@ def compose_frame(
     draw_trail(draw, sample_world_pixels, frame_index, camera_center_world, options)
     if options.show_distance:
         draw_distance_badge(draw, sample_distances, frame_index, options)
-    draw_arrow(overlay, samples, sample_world_pixels, frame_index, camera_center_world, options)
+    draw_arrow(
+        overlay, samples, sample_world_pixels, frame_index, camera_center_world, options
+    )
     if options.show_progress_bar:
         draw_progress_bar(draw, frame_index, options)
-    draw_metric_graphs(draw, samples, sample_distances, frame_index, options)
+    if prepared_metric_graphs is None:
+        draw_metric_graphs(draw, samples, sample_distances, frame_index, options)
+    else:
+        overlay.alpha_composite(prepared_metric_graphs.static_layer)
+        draw_prepared_metric_graph_markers(draw, prepared_metric_graphs, frame_index)
     return Image.alpha_composite(frame, overlay)
 
 
@@ -409,9 +471,15 @@ def draw_arrow(
     if frame_index == 0:
         bearing = compute_bearing_degrees(samples[0], samples[min(1, len(samples) - 1)])
     else:
-        bearing = compute_bearing_degrees(samples[frame_index - 1], samples[frame_index])
-    arrow = make_arrow(options.arrow_size, options.avatar_id).rotate(-bearing, expand=True, resample=Image.Resampling.BICUBIC)
-    arrow_x, arrow_y = world_to_frame(sample_world_pixels[frame_index], camera_center_world, options)
+        bearing = compute_bearing_degrees(
+            samples[frame_index - 1], samples[frame_index]
+        )
+    arrow = make_arrow(options.arrow_size, options.avatar_id).rotate(
+        -bearing, expand=True, resample=Image.Resampling.BICUBIC
+    )
+    arrow_x, arrow_y = world_to_frame(
+        sample_world_pixels[frame_index], camera_center_world, options
+    )
     x = int(arrow_x - arrow.width / 2)
     y = int(arrow_y - arrow.height / 2)
     overlay.alpha_composite(arrow, (x, y))
@@ -424,7 +492,12 @@ def make_arrow(size: int, avatar_id: str = "mt15") -> Image.Image:
         shadow_offset = max(1, size // 18)
         inset = max(2, size // 12)
         draw.ellipse(
-            (inset + shadow_offset, inset + shadow_offset, size - inset + shadow_offset, size - inset + shadow_offset),
+            (
+                inset + shadow_offset,
+                inset + shadow_offset,
+                size - inset + shadow_offset,
+                size - inset + shadow_offset,
+            ),
             fill=(0, 0, 0, 85),
         )
         draw.ellipse(
@@ -435,7 +508,12 @@ def make_arrow(size: int, avatar_id: str = "mt15") -> Image.Image:
         )
         highlight = max(3, size // 5)
         draw.ellipse(
-            (size * 0.32, size * 0.28, size * 0.32 + highlight, size * 0.28 + highlight),
+            (
+                size * 0.32,
+                size * 0.28,
+                size * 0.32 + highlight,
+                size * 0.28 + highlight,
+            ),
             fill=(255, 255, 255, 85),
         )
         return image
@@ -478,7 +556,12 @@ def make_arrow(size: int, avatar_id: str = "mt15") -> Image.Image:
     shadow = [(x + 2, y + 3) for x, y in points]
     draw.polygon(shadow, fill=(0, 0, 0, 92))
     draw.polygon(points, fill=(0, 104, 255, 245))
-    draw.line(points + [points[0]], fill=(255, 255, 255, 230), width=max(2, size // 18), joint="curve")
+    draw.line(
+        points + [points[0]],
+        fill=(255, 255, 255, 230),
+        width=max(2, size // 18),
+        joint="curve",
+    )
     return image
 
 
@@ -499,28 +582,65 @@ def draw_distance_badge(
     progress_bottom = max(28, int(options.width * 0.045))
     gap = max(10, int(options.height * 0.014))
     x = margin
-    y = progress_bottom + gap if options.show_progress_bar else max(24, int(options.height * 0.035))
+    y = (
+        progress_bottom + gap
+        if options.show_progress_bar
+        else max(24, int(options.height * 0.035))
+    )
     radius = max(8, int(box_h * 0.35))
-    draw.rounded_rectangle((x + 3, y + 4, x + box_w + 3, y + box_h + 4), radius=radius, fill=(0, 0, 0, 105))
-    draw.rounded_rectangle((x, y, x + box_w, y + box_h), radius=radius, fill=(242, 26, 26, 245))
+    draw.rounded_rectangle(
+        (x + 3, y + 4, x + box_w + 3, y + box_h + 4), radius=radius, fill=(0, 0, 0, 105)
+    )
+    draw.rounded_rectangle(
+        (x, y, x + box_w, y + box_h), radius=radius, fill=(242, 26, 26, 245)
+    )
     draw.text((x + pad_x, y + pad_y - 1), text, fill=(255, 255, 255, 255), font=font)
 
 
-def draw_metric_graphs(
-    draw: ImageDraw.ImageDraw,
+def prepare_metric_graphs(
     samples: list[RoutePoint],
     sample_distances: list[float],
-    frame_index: int,
     options: RenderOptions,
-) -> None:
+) -> PreparedMetricGraphs | None:
+    """Prepare immutable static graph assets for enabled, available metric series."""
+    metrics = _available_metrics(samples, sample_distances, options)
+    if not metrics:
+        return None
+
+    static_layer = Image.new("RGBA", (options.width, options.height), (0, 0, 0, 0))
+    static_draw = ImageDraw.Draw(static_layer)
+    graphs = tuple(
+        _draw_metric_graph_static(static_draw, bounds, label, values, color, options)
+        for (label, values, color), bounds in zip(
+            metrics, _metric_graph_bounds(len(metrics), options), strict=True
+        )
+    )
+    static_layer.readonly = 1
+    return PreparedMetricGraphs(graphs=graphs, static_layer=static_layer)
+
+
+def _available_metrics(
+    samples: list[RoutePoint],
+    sample_distances: list[float],
+    options: RenderOptions,
+) -> list[tuple[str, list[float | None], tuple[int, int, int, int]]]:
     metrics: list[tuple[str, list[float | None], tuple[int, int, int, int]]] = []
     if options.show_speed:
-        metrics.append(("Speed", speed_series(samples, sample_distances), (63, 146, 255, 245)))
+        values = speed_series(samples, sample_distances)
+        if any(value is not None for value in values):
+            metrics.append(("Speed", values, (63, 146, 255, 245)))
     if options.show_elevation:
-        metrics.append(("Elevation", elevation_series(samples), (43, 204, 143, 245)))
-    if not metrics:
-        return
+        values = elevation_series(samples)
+        if any(value is not None for value in values):
+            metrics.append(("Elevation", values, (43, 204, 143, 245)))
+    return metrics
 
+
+def _metric_graph_bounds(
+    count: int, options: RenderOptions
+) -> list[tuple[float, float, float, float]]:
+    if count == 0:
+        return []
     margin_x = max(18, int(options.width * 0.035))
     margin_bottom = max(18, int(options.height * 0.030))
     gap = max(10, int(options.width * 0.014))
@@ -529,32 +649,27 @@ def draw_metric_graphs(
     x2 = options.width - margin_x
     y2 = options.height - margin_bottom
     y1 = y2 - graph_h
-
-    if len(metrics) == 1:
-        bounds = [(x1, y1, x2, y2)]
-    else:
-        mid_x = (x1 + x2) / 2
-        bounds = [(x1, y1, mid_x - gap / 2, y2), (mid_x + gap / 2, y1, x2, y2)]
-
-    for metric, metric_bounds in zip(metrics, bounds, strict=True):
-        label, values, color = metric
-        draw_metric_graph(draw, metric_bounds, label, values, frame_index, color, options)
+    if count == 1:
+        return [(x1, y1, x2, y2)]
+    mid_x = (x1 + x2) / 2
+    return [(x1, y1, mid_x - gap / 2, y2), (mid_x + gap / 2, y1, x2, y2)]
 
 
-def draw_metric_graph(
+def _draw_metric_graph_static(
     draw: ImageDraw.ImageDraw,
     bounds: tuple[float, float, float, float],
     label: str,
     values: list[float | None],
-    frame_index: int,
     color: tuple[int, int, int, int],
     options: RenderOptions,
-) -> None:
+) -> PreparedMetricGraph:
     x1, y1, x2, y2 = bounds
     panel_w = x2 - x1
     panel_h = y2 - y1
     radius = max(8, int(panel_h * 0.12))
-    draw.rounded_rectangle((x1 + 3, y1 + 4, x2 + 3, y2 + 4), radius=radius, fill=(0, 0, 0, 88))
+    draw.rounded_rectangle(
+        (x1 + 3, y1 + 4, x2 + 3, y2 + 4), radius=radius, fill=(0, 0, 0, 88)
+    )
     draw.rounded_rectangle((x1, y1, x2, y2), radius=radius, fill=(8, 16, 28, 212))
 
     font = load_font(max(13, min(20, int(options.width * 0.016))), bold=True)
@@ -569,23 +684,28 @@ def draw_metric_graph(
     chart_right = x2 - pad_x
     chart_top = y1 + pad_top + label_h + max(8, int(panel_h * 0.08))
     chart_bottom = y2 - pad_bottom
-    if chart_right <= chart_left or chart_bottom <= chart_top:
-        return
-
     for ratio in (0.25, 0.5, 0.75):
         y = chart_top + (chart_bottom - chart_top) * ratio
         draw.line((chart_left, y, chart_right, y), fill=(255, 255, 255, 30), width=1)
 
-    progress = 0.0 if len(values) <= 1 else frame_index / (len(values) - 1)
-    cursor_x = chart_left + (chart_right - chart_left) * clamp(progress, 0.0, 1.0)
-    draw.line((cursor_x, chart_top, cursor_x, chart_bottom), fill=(255, 255, 255, 70), width=1)
-
     valid_values = [value for value in values if value is not None]
     if not valid_values:
-        y = chart_bottom
-        draw.line((chart_left, y, chart_right, y), fill=(color[0], color[1], color[2], 120), width=2)
-        return
-
+        draw.line(
+            (chart_left, chart_bottom, chart_right, chart_bottom),
+            fill=(color[0], color[1], color[2], 120),
+            width=2,
+        )
+        return PreparedMetricGraph(
+            label=label,
+            color=color,
+            bounds=bounds,
+            chart_bounds=(chart_left, chart_top, chart_right, chart_bottom),
+            points=(),
+            segments=(),
+            minimum=0.0,
+            maximum=0.0,
+            font=font,
+        )
     minimum = min(valid_values)
     maximum = max(valid_values)
     if minimum == maximum:
@@ -593,50 +713,138 @@ def draw_metric_graph(
         minimum -= padding
         maximum += padding
     span = maximum - minimum
+    points = tuple(
+        None
+        if value is None
+        else (
+            chart_left
+            if len(values) <= 1
+            else chart_left + (chart_right - chart_left) * index / (len(values) - 1),
+            chart_bottom - (chart_bottom - chart_top) * (value - minimum) / span,
+        )
+        for index, value in enumerate(values)
+    )
+    segments = _metric_point_segments(points)
+    for segment in segments:
+        if len(segment) > 1:
+            draw.line(segment, fill=color, width=3, joint="curve")
+        else:
+            x, y = segment[0]
+            draw.ellipse((x - 2, y - 2, x + 2, y + 2), fill=color)
+    return PreparedMetricGraph(
+        label=label,
+        color=color,
+        bounds=bounds,
+        chart_bounds=(chart_left, chart_top, chart_right, chart_bottom),
+        points=points,
+        segments=segments,
+        minimum=minimum,
+        maximum=maximum,
+        font=font,
+    )
 
-    def graph_point(index: int, value: float) -> tuple[float, float]:
-        value_progress = (value - minimum) / span
-        x = chart_left if len(values) <= 1 else chart_left + (chart_right - chart_left) * index / (len(values) - 1)
-        y = chart_bottom - (chart_bottom - chart_top) * value_progress
-        return x, y
 
+def _metric_point_segments(
+    points: tuple[tuple[float, float] | None, ...],
+) -> tuple[tuple[tuple[float, float], ...], ...]:
+    segments: list[tuple[tuple[float, float], ...]] = []
     segment: list[tuple[float, float]] = []
-    current_point: tuple[float, float] | None = None
-    for index, value in enumerate(values):
-        if value is None:
-            if len(segment) > 1:
-                draw.line(segment, fill=color, width=3, joint="curve")
-            elif len(segment) == 1:
-                x, y = segment[0]
-                draw.ellipse((x - 2, y - 2, x + 2, y + 2), fill=color)
-            segment = []
-            continue
-        point = graph_point(index, value)
-        if index == frame_index:
-            current_point = point
-        segment.append(point)
-    if len(segment) > 1:
-        draw.line(segment, fill=color, width=3, joint="curve")
-    elif len(segment) == 1:
-        x, y = segment[0]
-        draw.ellipse((x - 2, y - 2, x + 2, y + 2), fill=color)
-
-    if current_point is not None:
-        x, y = current_point
-        marker_r = max(4, int(panel_h * 0.045))
-        draw.ellipse((x - marker_r, y - marker_r, x + marker_r, y + marker_r), fill=color, outline=(255, 255, 255, 235), width=2)
+    for point in points:
+        if point is None:
+            if segment:
+                segments.append(tuple(segment))
+                segment = []
+        else:
+            segment.append(point)
+    if segment:
+        segments.append(tuple(segment))
+    return tuple(segments)
 
 
-def draw_progress_bar(draw: ImageDraw.ImageDraw, frame_index: int, options: RenderOptions) -> None:
+def draw_prepared_metric_graph_markers(
+    draw: ImageDraw.ImageDraw,
+    prepared_metric_graphs: PreparedMetricGraphs,
+    frame_index: int,
+) -> None:
+    """Draw frame-specific cursors and markers over prepared graph layers."""
+    for graph in prepared_metric_graphs.graphs:
+        _draw_metric_graph_marker(draw, graph, frame_index)
+
+
+def _draw_metric_graph_marker(
+    draw: ImageDraw.ImageDraw,
+    graph: PreparedMetricGraph,
+    frame_index: int,
+) -> None:
+    chart_left, chart_top, chart_right, chart_bottom = graph.chart_bounds
+    progress = 0.0 if len(graph.points) <= 1 else frame_index / (len(graph.points) - 1)
+    cursor_x = chart_left + (chart_right - chart_left) * clamp(progress, 0.0, 1.0)
+    draw.line(
+        (cursor_x, chart_top, cursor_x, chart_bottom),
+        fill=(255, 255, 255, 70),
+        width=1,
+    )
+    if (
+        0 <= frame_index < len(graph.points)
+        and (point := graph.points[frame_index]) is not None
+    ):
+        x, y = point
+        marker_r = max(4, int((graph.bounds[3] - graph.bounds[1]) * 0.045))
+        draw.ellipse(
+            (x - marker_r, y - marker_r, x + marker_r, y + marker_r),
+            fill=graph.color,
+            outline=(255, 255, 255, 235),
+            width=2,
+        )
+
+
+def draw_metric_graphs(
+    draw: ImageDraw.ImageDraw,
+    samples: list[RoutePoint],
+    sample_distances: list[float],
+    frame_index: int,
+    options: RenderOptions,
+) -> None:
+    """Draw enabled, available metric graphs for one frame."""
+    metrics = _available_metrics(samples, sample_distances, options)
+    for (label, values, color), bounds in zip(
+        metrics, _metric_graph_bounds(len(metrics), options), strict=True
+    ):
+        draw_metric_graph(draw, bounds, label, values, frame_index, color, options)
+
+
+def draw_metric_graph(
+    draw: ImageDraw.ImageDraw,
+    bounds: tuple[float, float, float, float],
+    label: str,
+    values: list[float | None],
+    frame_index: int,
+    color: tuple[int, int, int, int],
+    options: RenderOptions,
+) -> None:
+    """Draw one metric graph with its cursor and current-value marker."""
+    graph = _draw_metric_graph_static(draw, bounds, label, values, color, options)
+    _draw_metric_graph_marker(draw, graph, frame_index)
+
+
+def draw_progress_bar(
+    draw: ImageDraw.ImageDraw, frame_index: int, options: RenderOptions
+) -> None:
     margin = max(24, int(options.width * 0.05))
     bar_h = max(10, int(options.height * 0.010))
     x1 = margin
     x2 = options.width - margin
     y2 = max(28, int(options.width * 0.045))
     y1 = y2 - bar_h
-    progress = 1.0 if options.frame_count <= 1 else frame_index / (options.frame_count - 1)
+    progress = (
+        1.0 if options.frame_count <= 1 else frame_index / (options.frame_count - 1)
+    )
     draw.rounded_rectangle((x1, y1, x2, y2), radius=bar_h // 2, fill=(8, 16, 28, 170))
-    draw.rounded_rectangle((x1, y1, x1 + (x2 - x1) * progress, y2), radius=bar_h // 2, fill=(246, 30, 30, 245))
+    draw.rounded_rectangle(
+        (x1, y1, x1 + (x2 - x1) * progress, y2),
+        radius=bar_h // 2,
+        fill=(246, 30, 30, 245),
+    )
 
 
 def world_to_frame(
@@ -665,12 +873,20 @@ def parse_hex_color(value: str, alpha: int) -> tuple[int, int, int, int]:
         return (255, 47, 47, alpha)
 
 
-def load_font(size: int, bold: bool = False) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
+def load_font(
+    size: int, bold: bool = False
+) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
     candidates = [
-        "/System/Library/Fonts/Supplemental/Arial Bold.ttf" if bold else "/System/Library/Fonts/Supplemental/Arial.ttf",
-        "/System/Library/Fonts/Supplemental/Helvetica Bold.ttf" if bold else "/System/Library/Fonts/Supplemental/Helvetica.ttf",
+        "/System/Library/Fonts/Supplemental/Arial Bold.ttf"
+        if bold
+        else "/System/Library/Fonts/Supplemental/Arial.ttf",
+        "/System/Library/Fonts/Supplemental/Helvetica Bold.ttf"
+        if bold
+        else "/System/Library/Fonts/Supplemental/Helvetica.ttf",
         "/Library/Fonts/Arial Bold.ttf" if bold else "/Library/Fonts/Arial.ttf",
-        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf" if bold else "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
+        if bold
+        else "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
     ]
     for path in candidates:
         try:
@@ -695,7 +911,9 @@ def format_elevation(elevation: float | None) -> str:
     return f"{elevation:.0f} m"
 
 
-def format_speed(samples: list[RoutePoint], sample_distances: list[float], frame_index: int) -> str:
+def format_speed(
+    samples: list[RoutePoint], sample_distances: list[float], frame_index: int
+) -> str:
     if frame_index <= 0:
         return "-- km/h"
     current = samples[frame_index]
@@ -709,15 +927,23 @@ def format_speed(samples: list[RoutePoint], sample_distances: list[float], frame
     return f"{meters / seconds * 3.6:.0f} km/h"
 
 
-def speed_series(samples: list[RoutePoint], sample_distances: list[float]) -> list[float | None]:
-    values = [speed_at_frame(samples, sample_distances, frame_index) for frame_index in range(len(samples))]
-    if len(values) > 1 and values[0] is None:
-        values[0] = values[1]
-    return values
+def speed_series(
+    samples: list[RoutePoint], sample_distances: list[float]
+) -> list[float | None]:
+    return [
+        speed_at_frame(samples, sample_distances, frame_index)
+        for frame_index in range(len(samples))
+    ]
 
 
-def speed_at_frame(samples: list[RoutePoint], sample_distances: list[float], frame_index: int) -> float | None:
-    if frame_index <= 0 or frame_index >= len(samples) or frame_index >= len(sample_distances):
+def speed_at_frame(
+    samples: list[RoutePoint], sample_distances: list[float], frame_index: int
+) -> float | None:
+    if (
+        frame_index <= 0
+        or frame_index >= len(samples)
+        or frame_index >= len(sample_distances)
+    ):
         return None
     current = samples[frame_index]
     previous = samples[frame_index - 1]
