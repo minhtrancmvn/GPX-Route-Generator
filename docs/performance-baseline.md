@@ -118,6 +118,26 @@ PYTHONPATH=src python3 -m benchmarks.benchmark_metrics --graph-only --frames 180
 
 Asset preparation runs once per preview or video. Static panel, grid, line, and font assets are reused for every frame; dynamic cursor and marker work remains per-frame. Pixel parity tests cover first/last frames plus trail/avatar overlap in landscape and portrait.
 
+## Trail culling and decimation
+
+Run from repository root using worktree source when no local editable install exists:
+
+```bash
+PYTHONPATH=src python3 -m benchmarks.benchmark_trail --frames 450
+PYTHONPATH=src python3 -m benchmarks.benchmark_trail --frames 900
+PYTHONPATH=src python3 -m benchmarks.benchmark_trail --frames 1800
+```
+
+Environment: Python 3.14.6, macOS 27.0 arm64. Synthetic nearly straight trail with no map I/O, metric graphs, or HUD. The benchmark measures one `compose_frame` call and reports source versus submitted polyline points.
+
+| Frames | Before preview composition (s) | Before submitted points | After composition (s) | After submitted points |
+|---:|---:|---:|---:|---:|
+| 450 | 0.080285 | 450 | 0.002057 | 2 |
+| 900 | 0.035529 | 900 | 0.002965 | 2 |
+| 1,800 | 0.040463 | 1,800 | 0.003832 | 4 |
+
+Before timings use existing mocked-map preview benchmark and include camera planning; after timings isolate trail composition. They are context measurements, not direct like-for-like speedup claims. The submitted-point count confirms conservative screen-space decimation for this straight fixture.
+
 ## Correctness invariants
 
 Every benchmark result must report:

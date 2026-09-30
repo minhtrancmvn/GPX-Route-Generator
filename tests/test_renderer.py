@@ -2,8 +2,11 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 from io import BytesIO
+from unittest.mock import patch
 
 from PIL import Image, ImageDraw
+
+import gpx_route_generator.renderer as renderer
 
 from gpx_route_generator.geo import lat_lon_to_world_pixel
 from gpx_route_generator.models import RenderOptions, RoutePoint
@@ -51,6 +54,32 @@ def render_graph_frame(show_speed: bool, show_elevation: bool) -> Image.Image:
         camera_center_world=sample_world_pixels[1],
         options=options,
     ).convert("RGB")
+
+
+def test_draw_trail_submits_prepared_visible_points() -> None:
+    options = RenderOptions(show_distance=False, show_progress_bar=False)
+    samples, sample_world_pixels, sample_distances = make_route()
+    visible_points = [(20.0, 20.0), (40.0, 40.0)]
+
+    with patch.object(renderer, "visible_trail_points", return_value=visible_points) as prepare:
+        with patch.object(ImageDraw.ImageDraw, "line") as draw_line:
+            compose_frame(
+                map_bytes=make_map_bytes(options),
+                samples=samples,
+                sample_world_pixels=sample_world_pixels,
+                sample_distances=sample_distances,
+                frame_index=2,
+                camera_center_world=sample_world_pixels[2],
+                options=options,
+            )
+
+    prepare.assert_called_once_with(sample_world_pixels, sample_world_pixels[2], options)
+    draw_line.assert_any_call(
+        visible_points,
+        fill=(255, 47, 47, 224),
+        width=options.trail_width,
+        joint="curve",
+    )
 
 
 def test_avatar_size_scales_visible_sprite() -> None:
