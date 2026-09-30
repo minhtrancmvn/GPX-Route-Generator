@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from datetime import timedelta
 import math
+from collections import deque
+from collections.abc import Iterator
 
 from .models import RoutePoint
 
@@ -277,6 +279,86 @@ def apply_zoom_transitions(
     return result
 
 
+def _indexed_window_bounds(
+    distances: list[float],
+    pixels: list[tuple[float, float]],
+    window_meters: float,
+    future_ratio: float = 0.65,
+) -> Iterator[tuple[float, float, float, float]]:
+    """Yield exact projected bounds for every legacy local route window."""
+    future_ratio = max(0.2, min(0.8, future_ratio))
+    left_index = 0
+    right_index = 0
+    min_x: deque[int] = deque()
+    max_x: deque[int] = deque()
+    min_y: deque[int] = deque()
+    max_y: deque[int] = deque()
+
+    for index, current_distance in enumerate(distances):
+        start_distance = current_distance - window_meters * (1 - future_ratio)
+        end_distance = current_distance + window_meters * future_ratio
+        while right_index < len(distances) and distances[right_index] <= end_distance:
+            x, y = pixels[right_index]
+            while min_x and pixels[min_x[-1]][0] >= x:
+                min_x.pop()
+            while max_x and pixels[max_x[-1]][0] <= x:
+                max_x.pop()
+            while min_y and pixels[min_y[-1]][1] >= y:
+                min_y.pop()
+            while max_y and pixels[max_y[-1]][1] <= y:
+                max_y.pop()
+            min_x.append(right_index)
+            max_x.append(right_index)
+            min_y.append(right_index)
+            max_y.append(right_index)
+            right_index += 1
+        while left_index < right_index and distances[left_index] < start_distance:
+            if min_x and min_x[0] == left_index:
+                min_x.popleft()
+            if max_x and max_x[0] == left_index:
+                max_x.popleft()
+            if min_y and min_y[0] == left_index:
+                min_y.popleft()
+            if max_y and max_y[0] == left_index:
+                max_y.popleft()
+            left_index += 1
+
+        min_window_x = pixels[min_x[0]][0]
+        min_window_y = pixels[min_y[0]][1]
+        max_window_x = pixels[max_x[0]][0]
+        max_window_y = pixels[max_y[0]][1]
+        if right_index - left_index < 2 and len(pixels) > 1:
+            neighbor_index = index + 1 if index == 0 else index - 1
+            neighbor_x, neighbor_y = pixels[neighbor_index]
+            yield (
+                min(min_window_x, neighbor_x),
+                min(min_window_y, neighbor_y),
+                max(max_window_x, neighbor_x),
+                max(max_window_y, neighbor_y),
+            )
+        else:
+            yield min_window_x, min_window_y, max_window_x, max_window_y
+
+
+def _legacy_dynamic_camera_states(
+    points: list[RoutePoint],
+    distances: list[float],
+    window_meters: float,
+    zoom: int,
+) -> list[CameraState]:
+    """Preserve camera behavior for non-monotonic or non-finite distances."""
+    target_states: list[CameraState] = []
+    for index, point in enumerate(points):
+        center = route_center_world_pixel(local_route_window_points(points, distances, index, window_meters), zoom)
+        point_center = lat_lon_to_world_pixel(point.lat, point.lon, zoom)
+        blended_center = (
+            center[0] * 0.45 + point_center[0] * 0.55,
+            center[1] * 0.45 + point_center[1] * 0.55,
+        )
+        target_states.append(CameraState(zoom=zoom, center_world=blended_center))
+    return target_states
+
+
 def dynamic_camera_states(
     points: list[RoutePoint],
     distances: list[float],
@@ -289,18 +371,26 @@ def dynamic_camera_states(
 ) -> list[CameraState]:
     if not points:
         return []
+    if len(points) != len(distances):
+        raise ValueError("Points and distances must have the same length.")
     total_distance = distances[-1] if distances else 0
     window_meters = dynamic_route_window_meters(total_distance, duration_seconds)
 
     # Keep a consistent reference-scale zoom. The cached map segment planner
     # widens this only when a route cannot fit within its 12-image cap.
     zoom = max_zoom
+    if not all(math.isfinite(distance) for distance in distances) or any(
+        current < previous for previous, current in zip(distances, distances[1:])
+    ):
+        return _legacy_dynamic_camera_states(points, distances, window_meters, zoom)
 
-    target_states: list[CameraState] = []
-    for index in range(len(points)):
-        window = local_route_window_points(points, distances, index, window_meters)
-        center = route_center_world_pixel(window, zoom)
-        point_center = lat_lon_to_world_pixel(points[index].lat, points[index].lon, zoom)
+    pixels = [lat_lon_to_world_pixel(point.lat, point.lon, zoom) for point in points]
+    target_states = []
+    for point_center, (min_x, min_y, max_x, max_y) in zip(
+        pixels,
+        _indexed_window_bounds(distances, pixels, window_meters),
+    ):
+        center = ((min_x + max_x) / 2, (min_y + max_y) / 2)
         blended_center = (
             center[0] * 0.45 + point_center[0] * 0.55,
             center[1] * 0.45 + point_center[1] * 0.55,
