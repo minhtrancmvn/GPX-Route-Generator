@@ -138,6 +138,93 @@ def test_dynamic_route_window_short_trip_long_duration_zooms_in() -> None:
     assert dynamic_route_window_meters(20_000, duration_seconds=10) == pytest.approx(5_000)
 
 
+def test_dynamic_camera_preserves_unsorted_distance_behavior() -> None:
+    points = [RoutePoint(0.0, 0.0), RoutePoint(0.0, 0.1), RoutePoint(0.0, 0.2)]
+    distances = [0.0, 10_000.0, 0.0]
+
+    states = dynamic_camera_states(
+        points,
+        distances,
+        width=1280,
+        height=720,
+        max_zoom=14,
+        duration_seconds=30,
+    )
+
+    window_meters = dynamic_route_window_meters(distances[-1], duration_seconds=30)
+    expected = []
+    for index, point in enumerate(points):
+        center = route_center_world_pixel(local_route_window_points(points, distances, index, window_meters), zoom=14)
+        point_center = lat_lon_to_world_pixel(point.lat, point.lon, zoom=14)
+        expected.append(
+            (
+                center[0] * 0.45 + point_center[0] * 0.55,
+                center[1] * 0.45 + point_center[1] * 0.55,
+            )
+        )
+
+    assert [state.center_world for state in states] == pytest.approx(expected, abs=1e-9)
+
+
+def test_dynamic_camera_rejects_mismatched_points_and_distances() -> None:
+    with pytest.raises(ValueError, match="Points and distances must have the same length"):
+        dynamic_camera_states(
+            [RoutePoint(0.0, 0.0), RoutePoint(0.0, 0.001)],
+            [0.0],
+            width=1280,
+            height=720,
+        )
+
+
+def test_dynamic_camera_preserves_single_point_fallback() -> None:
+    point = RoutePoint(0.0, 0.0)
+
+    states = dynamic_camera_states(
+        [point],
+        [0.0],
+        width=1280,
+        height=720,
+        max_zoom=14,
+    )
+
+    assert len(states) == 1
+    assert states[0].zoom == 14
+    assert states[0].center_world == pytest.approx(lat_lon_to_world_pixel(0.0, 0.0, zoom=14), abs=1e-9)
+
+
+def test_dynamic_camera_matches_legacy_windows_for_single_point_windows() -> None:
+    points = [
+        RoutePoint(0.0, 0.0),
+        RoutePoint(0.0, 0.1),
+        RoutePoint(0.0, 0.2),
+    ]
+    distances = cumulative_distances(points)
+
+    states = dynamic_camera_states(
+        points,
+        distances,
+        width=1280,
+        height=720,
+        max_zoom=14,
+        duration_seconds=30,
+    )
+
+    legacy_centers = []
+    window_meters = dynamic_route_window_meters(distances[-1], duration_seconds=30)
+    for index, point in enumerate(points):
+        window = local_route_window_points(points, distances, index, window_meters)
+        center = route_center_world_pixel(window, zoom=14)
+        point_center = lat_lon_to_world_pixel(point.lat, point.lon, zoom=14)
+        legacy_centers.append(
+            (
+                center[0] * 0.45 + point_center[0] * 0.55,
+                center[1] * 0.45 + point_center[1] * 0.55,
+            )
+        )
+
+    assert [state.center_world for state in states] == pytest.approx(legacy_centers, abs=1e-9)
+
+
 def test_dynamic_camera_keeps_requested_target_zoom_for_long_drive() -> None:
     coarse_points = [
         RoutePoint(10.776, 106.700),
