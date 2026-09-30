@@ -74,11 +74,10 @@ async def _read_upload(upload: UploadFile, *, max_bytes: int) -> bytes:
 
 
 def _close_map_client(client: StaticMapClient) -> None:
-    close = getattr(client, "close", None)
-    if close is None:
-        return
     try:
-        close()
+        close = getattr(client, "close", None)
+        if close is not None:
+            close()
     except Exception:
         _log_sanitized_exception("Map client cleanup failed")
 
