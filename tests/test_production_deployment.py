@@ -63,6 +63,7 @@ def test_deploy_uses_host_key_verification_and_never_uploads_local_env() -> None
     assert 'tar --exclude' not in workflow
     script = (ROOT / "deploy/deploy.sh").read_text()
     assert 'GPX_ENV_FILE="$root/.env"' in script
+    assert 'ln -sfn "$GPX_ENV_FILE" "$release/.env"' in script
     assert "Production .env must have mode 600" in script
     assert 'readlink -f "$root/current"' in script
     assert "ssh-keyscan" not in workflow

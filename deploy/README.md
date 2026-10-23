@@ -21,7 +21,7 @@ Example directory layout (create with appropriate owner and mode, not world-writ
   current -> releases/<healthy-commit-sha>
 ```
 
-Create `/home/ubuntu/gpx-route-generator/.env` beside `releases/` and `current`, mode `600`, owned by deployment account. The shared Lightsail environment now has this file at that exact path. This mirrors local workspace layout: `.env` at project root, excluded from Git and release archive. Copy variable names from repository `.env.example`, then set real values locally on that host. Do not upload development `.env` from a laptop. Required names:
+Create `/home/ubuntu/gpx-route-generator/.env` beside `releases/` and `current`, mode `600`, owned by deployment account. The shared Lightsail environment has this file at that exact path. Each deployed release receives a `.env` symlink to this root file before activation, matching Task Automation's layout without copying secrets into release source. Copy variable names from repository `.env.example`, then set real values locally on that host. Do not upload development `.env` from a laptop. Required names:
 
 ```dotenv
 APP_ENV=production
