@@ -24,6 +24,9 @@ const avatarPreview = document.querySelector("#avatar-preview");
 const videoStage = document.querySelector("#video-stage");
 const previewImage = document.querySelector("#preview-image");
 const appConfig = window.appConfig || {};
+const maxUploadBytes = appConfig.maxUploadBytes || 0;
+// Matches the reverse proxy's read timeout so a stuck upload surfaces as an error.
+const REQUEST_TIMEOUT_MS = 120_000;
 
 const dimensions = {
   landscape: "1280 × 720",
@@ -94,6 +97,13 @@ async function fetchPreview() {
   if (previewAbortController) {
     previewAbortController.abort();
   }
+  const sizeError = uploadSizeError(file);
+  if (sizeError) {
+    previewImage.hidden = true;
+    emptyState.hidden = false;
+    setMessage("Preview failed: " + sizeError, "error");
+    return;
+  }
   previewAbortController = new AbortController();
   const seq = ++previewRequestSeq;
 
@@ -103,15 +113,14 @@ async function fetchPreview() {
   }
 
   try {
-    const response = await fetch("/api/preview", {
+    const response = await fetchWithTimeout("/api/preview", {
       method: "POST",
       body: buildPayload(),
       signal: previewAbortController.signal,
     });
     if (seq !== previewRequestSeq) return;
     if (!response.ok) {
-      const errData = await response.json().catch(() => ({}));
-      throw new Error(errData.detail || `Preview failed (${response.status})`);
+      throw new Error(await readErrorDetail(response, "Server error"));
     }
     const blob = await response.blob();
     if (seq !== previewRequestSeq) return;
@@ -183,6 +192,47 @@ function setSpinner(active, label = "Rendering…") {
   spinnerLabel.textContent = label;
 }
 
+// ─── Request errors ───────────────────────────────
+
+function formatMegabytes(bytes) {
+  return `${(bytes / (1024 * 1024)).toFixed(1).replace(/\.0$/, "")} MB`;
+}
+
+function uploadSizeError(file) {
+  if (!maxUploadBytes || file.size <= maxUploadBytes) return null;
+  return `GPX file is ${formatMegabytes(file.size)}; the limit is ${formatMegabytes(maxUploadBytes)}.`;
+}
+
+async function readErrorDetail(response, fallback) {
+  if (response.status === 413) {
+    return maxUploadBytes
+      ? `GPX file is too large; the limit is ${formatMegabytes(maxUploadBytes)}.`
+      : "GPX file is too large.";
+  }
+  // Proxy errors arrive as HTML, so a missing JSON detail falls back to the status.
+  const data = await response.json().catch(() => null);
+  if (data && typeof data.detail === "string") return data.detail;
+  return `${fallback} (HTTP ${response.status}).`;
+}
+
+async function fetchWithTimeout(url, options = {}) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  const forwardAbort = () => controller.abort();
+  options.signal?.addEventListener("abort", forwardAbort);
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } catch (error) {
+    if (error.name === "AbortError" && !options.signal?.aborted) {
+      throw new Error("The server did not respond in time. Please try again.");
+    }
+    throw error;
+  } finally {
+    clearTimeout(timer);
+    options.signal?.removeEventListener("abort", forwardAbort);
+  }
+}
+
 // ─── Form payload ─────────────────────────────────
 
 function buildPayload() {
@@ -232,6 +282,11 @@ async function startRender(event) {
     setMessage("Choose a GPX file before rendering.", "error");
     return;
   }
+  const sizeError = uploadSizeError(gpxFileInput.files[0]);
+  if (sizeError) {
+    setMessage(sizeError, "error");
+    return;
+  }
 
   renderButton.disabled = true;
   renderButton.innerHTML = `
@@ -244,14 +299,14 @@ async function startRender(event) {
 
   try {
     const payload = await attachRecaptchaToken(buildPayload());
-    const response = await fetch("/api/render", {
+    const response = await fetchWithTimeout("/api/render", {
       method: "POST",
       body: payload,
     });
-    const data = await response.json();
     if (!response.ok) {
-      throw new Error(data.detail || "Render could not start.");
+      throw new Error(await readErrorDetail(response, "Render could not start"));
     }
+    const data = await response.json();
     statusTitle.textContent = "Queued";
     setMessage(`Up to ${data.estimated_map_requests} Google Static Map images will be used.`);
     pollJob(data.id);

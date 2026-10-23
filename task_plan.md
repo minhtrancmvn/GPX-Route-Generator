@@ -77,3 +77,8 @@ Verify existing CAPTCHA and exposed credentials, then configure tested deploymen
 - Reference agent exceeded timebox and was stopped; inspected two exact reference files directly afterward.
 - Final shell check initially failed because zsh status is read-only; renamed/removed variable and reran successfully.
 - Final diff check found extra blank line at EOF in this plan; removed and reran.
+
+## Upload limit follow-up (2026-10-23)
+- Production renders hung at "Starting…": Nginx `client_max_body_size 6m` returned 413 for the user's GPX, and the browser never received the response.
+- Raised app limit to 10 MiB and Nginx cap to 11m (above app limit plus multipart overhead), so oversized uploads get the app's JSON 413.
+- Browser now rejects oversized files before upload, maps 413 and non-JSON errors to readable messages, and times out stuck requests after 120 s.

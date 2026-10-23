@@ -126,4 +126,5 @@ def test_gpx_vhost_routes_only_named_host_and_preserves_acme_challenge() -> None
     assert "default_server" not in config
     assert "proxy_pass http://127.0.0.1:8001;" in config
     assert "location ^~ /.well-known/acme-challenge/" in config
-    assert "client_max_body_size 6m;" in config
+    # Above the 10 MiB app limit plus multipart overhead, so the app returns its own 413.
+    assert "client_max_body_size 11m;" in config
