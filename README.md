@@ -107,6 +107,10 @@ docker run --rm -p 127.0.0.1:8000:8000 --env-file .env -v gpx-app-data:/app/data
 
 `-p 127.0.0.1:8000:8000` keeps the container off every other network interface. Public traffic must go through a reverse proxy, not a direct publish; `-p 8000:8000` exposes the app to the whole network and is not used here. The `gpx-app-data` named volume starts with writable permissions for UID 10001 from the image, so a bind-mounted host directory is unnecessary.
 
+## Automated production deployment
+
+See [production deployment setup](deploy/README.md) for GitHub Actions deployment after successful `main` CI, SSH secrets, isolated production Compose configuration, Cloudflare hostname routing, health checks, and rollback. Production uses loopback port `8001` by default, separate from local development port `8000`.
+
 ## AWS Lightsail with Docker
 
 1. Create an Ubuntu Lightsail instance, attach a static IP, and allow inbound HTTP/HTTPS in the Lightsail firewall.

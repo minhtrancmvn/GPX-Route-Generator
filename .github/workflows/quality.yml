@@ -54,6 +54,20 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
+      - name: Validate production Compose configuration
+        env:
+          DEPLOY_ROOT: ${{ runner.temp }}/gpx-compose-validation
+          GOOGLE_MAPS_API_KEY: ci-validation-only
+          RECAPTCHA_SITE_KEY: ci-validation-only
+          RECAPTCHA_SECRET_KEY: ci-validation-only
+        run: |
+          mkdir -p "$DEPLOY_ROOT"
+          touch "$DEPLOY_ROOT/.env"
+          docker compose --env-file /dev/null -f deploy/compose.production.yml config --quiet
+
+      - name: Check deployment shell script
+        run: bash -n deploy/deploy.sh && shellcheck deploy/deploy.sh
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
