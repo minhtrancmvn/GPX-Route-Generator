@@ -251,6 +251,40 @@ def test_default_upload_limit_is_ten_mebibytes(
     assert make_settings(tmp_path).max_upload_bytes == 10 * 1024 * 1024
 
 
+def test_index_page_sends_uploads_to_configured_origin(tmp_path: Path) -> None:
+    settings = replace(make_settings(tmp_path), upload_origin="https://upload.example.com")
+    response = TestClient(create_app(settings=settings)).get("/")
+    assert 'uploadOrigin: "https://upload.example.com",' in response.text
+
+
+def test_index_page_uploads_same_origin_by_default(tmp_path: Path) -> None:
+    response = TestClient(create_app(settings=make_settings(tmp_path))).get("/")
+    assert 'uploadOrigin: "",' in response.text
+
+
+def test_load_settings_reads_upload_origin_without_trailing_slash(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("UPLOAD_ORIGIN", "https://upload.example.com/")
+    monkeypatch.setattr("gpx_route_generator.config.load_dotenv", lambda: None)
+    monkeypatch.chdir(tmp_path)
+    from gpx_route_generator.config import load_settings
+
+    assert load_settings().upload_origin == "https://upload.example.com"
+
+
+@pytest.mark.parametrize(
+    "origin", ["upload.example.com", "https://upload.example.com/api", "javascript:alert(1)"]
+)
+def test_settings_reject_upload_origin_that_is_not_an_origin(
+    tmp_path: Path, origin: str
+) -> None:
+    from gpx_route_generator.config import validate_settings
+
+    with pytest.raises(ValueError, match="UPLOAD_ORIGIN"):
+        validate_settings(replace(make_settings(tmp_path), upload_origin=origin))
+
+
 def test_index_page_loads_recaptcha_in_production(tmp_path: Path) -> None:
     settings = Settings(
         google_maps_api_key="test-key",

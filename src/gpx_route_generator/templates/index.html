@@ -194,6 +194,7 @@
       recaptchaEnabled: {{ 'true' if recaptcha_enabled else 'false' }},
       recaptchaSiteKey: {{ recaptcha_site_key|tojson }},
       maxUploadBytes: {{ max_upload_bytes|int }},
+      uploadOrigin: {{ upload_origin|tojson }},
     };
   </script>
   <script src="{{ url_for('static', path='app.js') }}"></script>

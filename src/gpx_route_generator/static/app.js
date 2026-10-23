@@ -25,6 +25,8 @@ const videoStage = document.querySelector("#video-stage");
 const previewImage = document.querySelector("#preview-image");
 const appConfig = window.appConfig || {};
 const maxUploadBytes = appConfig.maxUploadBytes || 0;
+// Uploads may go to a separate host that bypasses the CDN; empty means same origin.
+const uploadOrigin = appConfig.uploadOrigin || "";
 // Matches the reverse proxy's read timeout so a stuck upload surfaces as an error.
 const REQUEST_TIMEOUT_MS = 120_000;
 
@@ -113,7 +115,7 @@ async function fetchPreview() {
   }
 
   try {
-    const response = await fetchWithTimeout("/api/preview", {
+    const response = await fetchWithTimeout(`${uploadOrigin}/api/preview`, {
       method: "POST",
       body: buildPayload(),
       signal: previewAbortController.signal,
@@ -226,6 +228,10 @@ async function fetchWithTimeout(url, options = {}) {
     if (error.name === "AbortError" && !options.signal?.aborted) {
       throw new Error("The server did not respond in time. Please try again.");
     }
+    // fetch rejects with a bare TypeError ("Failed to fetch") when the connection drops.
+    if (error.name === "TypeError") {
+      throw new Error("The upload was interrupted before reaching the server. Check your connection and try again.");
+    }
     throw error;
   } finally {
     clearTimeout(timer);
@@ -299,7 +305,7 @@ async function startRender(event) {
 
   try {
     const payload = await attachRecaptchaToken(buildPayload());
-    const response = await fetchWithTimeout("/api/render", {
+    const response = await fetchWithTimeout(`${uploadOrigin}/api/render`, {
       method: "POST",
       body: payload,
     });

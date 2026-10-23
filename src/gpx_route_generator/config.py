@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -27,6 +28,8 @@ class Settings:
     preview_requests_per_minute: int = 30
     render_requests_per_minute: int = 6
     max_active_previews: int = 2
+    # Origin that receives GPX uploads when it differs from the page origin.
+    upload_origin: str | None = None
 
     @property
     def recaptcha_enabled(self) -> bool:
@@ -84,6 +87,12 @@ def validate_settings(settings: Settings) -> None:
         raise ValueError("RENDER_REQUESTS_PER_MINUTE must be at least one.")
     if settings.max_active_previews < 1:
         raise ValueError("MAX_ACTIVE_PREVIEWS must be at least one.")
+    if settings.upload_origin and not re.fullmatch(
+        r"https?://[A-Za-z0-9.-]+(:[0-9]+)?", settings.upload_origin
+    ):
+        raise ValueError(
+            "UPLOAD_ORIGIN must be an origin such as https://upload.example.com."
+        )
     if settings.environment.lower() == "production":
         recaptcha_ready = bool(settings.recaptcha_site_key and settings.recaptcha_secret_key)
         if not recaptcha_ready and not settings.allow_unprotected_rendering:
@@ -115,6 +124,7 @@ def load_settings() -> Settings:
         preview_requests_per_minute=_get_positive_int("PREVIEW_REQUESTS_PER_MINUTE", 30),
         render_requests_per_minute=_get_positive_int("RENDER_REQUESTS_PER_MINUTE", 6),
         max_active_previews=_get_positive_int("MAX_ACTIVE_PREVIEWS", 2),
+        upload_origin=os.getenv("UPLOAD_ORIGIN", "").rstrip("/") or None,
     )
     validate_settings(settings)
     return settings

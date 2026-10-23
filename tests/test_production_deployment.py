@@ -128,3 +128,17 @@ def test_gpx_vhost_routes_only_named_host_and_preserves_acme_challenge() -> None
     assert "location ^~ /.well-known/acme-challenge/" in config
     # Above the 10 MiB app limit plus multipart overhead, so the app returns its own 413.
     assert "client_max_body_size 11m;" in config
+
+
+def test_upload_vhost_is_direct_and_only_accepts_uploads_from_the_site() -> None:
+    config = (ROOT / "deploy/nginx-gpx.conf").read_text()
+    upload = config[config.index("server_name gpx-upload.minhtran.id.vn;"):]
+    assert upload.count("server_name gpx-upload.minhtran.id.vn;") == 2
+    assert "/etc/letsencrypt/live/gpx-upload.minhtran.id.vn/fullchain.pem" in upload
+    assert 'add_header Access-Control-Allow-Origin "https://gpx-route-generator.minhtran.id.vn" always;' in upload
+    assert "location = /api/preview" in upload and "location = /api/render" in upload
+    assert upload.count("proxy_pass http://127.0.0.1:8001;") == 2
+    assert upload.count("limit_except POST") == 2
+    assert "client_max_body_size 11m;" in upload
+    assert "location ^~ /.well-known/acme-challenge/" in upload
+    assert "location / {\n        return 404;" in upload
