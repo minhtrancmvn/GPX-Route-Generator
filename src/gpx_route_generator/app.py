@@ -182,6 +182,7 @@ def create_app(
                 "recaptcha_enabled": app.state.settings.recaptcha_enabled,
                 "recaptcha_site_key": app.state.settings.recaptcha_site_key,
                 "max_upload_bytes": app.state.settings.max_upload_bytes,
+                "upload_origin": app.state.settings.upload_origin or "",
             },
         )
 

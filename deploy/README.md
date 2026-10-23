@@ -76,6 +76,12 @@ Merge this example into existing ingress configuration; do not replace other rou
 
 Cloudflare MCP account did not list the `minhtran.id.vn` zone, so DNS was not changed. Host routing uses Nginx on the same Lightsail host as Task Automation. `nginx-gpx.conf` is the hostname-specific GPX vhost; `nginx-default.conf` makes unmatched HTTP/HTTPS hosts redirect to `https://minhtran.id.vn` instead of falling through to Waybill. TLS certificate verification happens before an HTTPS redirect, so arbitrary unknown hostnames may still encounter certificate errors unless the edge handles their TLS. Keep existing named Waybill vhost unchanged.
 
+### Direct upload host
+
+Some ISPs (seen with Viettel) stall uploads to Cloudflare's edge while downloads work, so preview and render uploads go to `gpx-upload.minhtran.id.vn` instead. That hostname is a **DNS-only** (grey cloud) `A` record pointing at the Lightsail static IP; the page itself stays proxied. Its Nginx vhost in `nginx-gpx.conf` accepts only `POST /api/preview` and `POST /api/render` and returns 404 for everything else. It sends `Access-Control-Allow-Origin` for the page's origin only. A DNS-only record exposes the server IP.
+
+Enable it after the DNS record and its Let's Encrypt certificate exist (the vhost references the certificate, so Nginx validation fails without it): set `UPLOAD_ORIGIN=https://gpx-upload.minhtran.id.vn` in the root `.env` and redeploy. Leaving `UPLOAD_ORIGIN` unset uploads to the page origin.
+
 ## Activation and verification
 
 1. Shared Lightsail host is provisioned; isolated deployment key, root `.env`, Docker and Compose are ready. Candidate image passed isolated app startup/config check.

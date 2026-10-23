@@ -82,3 +82,5 @@ Verify existing CAPTCHA and exposed credentials, then configure tested deploymen
 - Production renders hung at "Starting…": Nginx `client_max_body_size 6m` returned 413 for the user's GPX, and the browser never received the response.
 - Raised app limit to 10 MiB and Nginx cap to 11m (above app limit plus multipart overhead), so oversized uploads get the app's JSON 413.
 - Browser now rejects oversized files before upload, maps 413 and non-JSON errors to readable messages, and times out stuck requests after 120 s.
+- Retest after deploy: uploads from Viettel through Cloudflare stall (~11 KB/s, then `ERR_HTTP2_PROTOCOL_ERROR`). The same uploads from AWS through Cloudflare, or from Viettel direct to the origin, finish in seconds. Mobile data works.
+- User chose a DNS-only upload host: `gpx-upload.minhtran.id.vn` takes preview/render POSTs directly; the page stays proxied. Enabled by `UPLOAD_ORIGIN` in the root `.env` once DNS and the certificate exist.
