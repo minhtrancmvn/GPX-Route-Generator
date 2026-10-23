@@ -181,6 +181,7 @@ def create_app(
                 "avatars": AVAILABLE_AVATARS,
                 "recaptcha_enabled": app.state.settings.recaptcha_enabled,
                 "recaptcha_site_key": app.state.settings.recaptcha_site_key,
+                "max_upload_bytes": app.state.settings.max_upload_bytes,
             },
         )
 

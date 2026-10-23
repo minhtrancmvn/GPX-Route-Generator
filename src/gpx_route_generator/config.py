@@ -16,7 +16,7 @@ class Settings:
     recaptcha_site_key: str | None = None
     recaptcha_secret_key: str | None = None
     ffmpeg_path: str = "ffmpeg"
-    max_upload_bytes: int = 5 * 1024 * 1024
+    max_upload_bytes: int = 10 * 1024 * 1024
     max_route_points: int = 50_000
     allow_unprotected_rendering: bool = False
     max_active_renders: int = 1
@@ -104,7 +104,7 @@ def load_settings() -> Settings:
         recaptcha_secret_key=os.getenv("RECAPTCHA_SECRET_KEY"),
         jobs_dir=project_root / "data" / "jobs",
         ffmpeg_path=os.getenv("FFMPEG_PATH", "ffmpeg"),
-        max_upload_bytes=_get_positive_int("MAX_UPLOAD_BYTES", 5 * 1024 * 1024),
+        max_upload_bytes=_get_positive_int("MAX_UPLOAD_BYTES", 10 * 1024 * 1024),
         max_route_points=_get_positive_int("MAX_ROUTE_POINTS", 50_000),
         allow_unprotected_rendering=os.getenv("ALLOW_UNPROTECTED_RENDERING", "").lower() in {"1", "true", "yes", "on"},
         max_active_renders=_get_positive_int("MAX_ACTIVE_RENDERS", 1),

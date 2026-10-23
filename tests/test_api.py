@@ -232,6 +232,25 @@ def test_index_page_loads(tmp_path: Path) -> None:
     assert "recaptcha/api.js" not in response.text
 
 
+def test_index_page_exposes_upload_limit_to_browser(tmp_path: Path) -> None:
+    settings = replace(make_settings(tmp_path), max_upload_bytes=1234)
+    client = TestClient(create_app(settings=settings))
+    response = client.get("/")
+    assert "maxUploadBytes: 1234," in response.text
+
+
+def test_default_upload_limit_is_ten_mebibytes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("MAX_UPLOAD_BYTES", raising=False)
+    monkeypatch.setattr("gpx_route_generator.config.load_dotenv", lambda: None)
+    monkeypatch.chdir(tmp_path)
+    from gpx_route_generator.config import load_settings
+
+    assert load_settings().max_upload_bytes == 10 * 1024 * 1024
+    assert make_settings(tmp_path).max_upload_bytes == 10 * 1024 * 1024
+
+
 def test_index_page_loads_recaptcha_in_production(tmp_path: Path) -> None:
     settings = Settings(
         google_maps_api_key="test-key",
