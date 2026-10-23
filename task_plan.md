@@ -16,7 +16,7 @@ Verify existing CAPTCHA and exposed credentials, then configure tested deploymen
 4. Which infrastructure changes require explicit user confirmation?
 
 ## Decisions Made
-- Work on feat/production-ci-cd; no commits, pushes, remote writes, or production restarts without authorization.
+- Work on feat/production-ci-cd; no commits, pushes, remote writes, or production restarts without authorization. (Historical note; publishing later authorized by user.)
 - Preserve prior completed plan in Git history; this plan tracks current request.
 - Redact credential values from all reports and command output.
 
@@ -70,6 +70,7 @@ Verify existing CAPTCHA and exposed credentials, then configure tested deploymen
 - Final graph detect-changes: 3 tracked files, 9 symbols, zero affected processes, LOW. New untracked deployment files not covered; deterministic YAML/shell/config/tests validate these separately.
 - Full pytest -v evidence: /tmp/gpx-deployment-pytest.txt (197 passed, existing Starlette/httpx deprecation warning). Python 3.14 locally; CI retains Python 3.11.
 - GitHub environment `lightsail-production` configured and restricted to `main`; secrets and variables set. Existing Preview and Production environments left untouched.
+- Release setup creates `.env` symlink inside each release pointing to protected deployment-root `.env`, matching Task Automation layout without copying secrets into source.
 - Production host provisioned at `/home/ubuntu/gpx-route-generator`, with root `.env` mode 600, Docker/Compose, unique restricted SSH deploy key, and named persistent volume to be created on first activation. Public GPX vhost will map only hostname to loopback port 8001; Waybill vhost untouched.
 - Independent config review found relative-symlink rollback mismatch; fixed with readlink -f and regression test. Rechecks main SHA after upload; main can still advance during host build, so deployment may briefly run an earlier CI-green revision until subsequent deployment.
 - All agent worktrees auto-removed by harness; git worktree prune/list confirms only primary worktree remains.

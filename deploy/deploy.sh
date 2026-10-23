@@ -13,6 +13,9 @@ export GPX_ENV_FILE="$root/.env"
 [[ "$(stat -c '%a' "$GPX_ENV_FILE")" == 600 ]] || { printf 'Production .env must have mode 600\n' >&2; exit 1; }
 [[ -f "$release/deploy/compose.production.yml" ]] || { printf 'Release missing\n' >&2; exit 1; }
 
+# Keep runtime config beside the release pointer, matching Task Automation layout.
+ln -sfn "$GPX_ENV_FILE" "$release/.env"
+
 exec 9>"$root/deploy.lock"
 flock -n 9 || { printf 'Another deployment is running\n' >&2; exit 1; }
 previous=$(readlink -f "$root/current" || true)
