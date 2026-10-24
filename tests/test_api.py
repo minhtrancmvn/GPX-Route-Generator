@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import re
 import shutil
 from dataclasses import replace
 from pathlib import Path
@@ -228,8 +229,27 @@ def test_index_page_loads(tmp_path: Path) -> None:
     assert "GPX Route Generator" in response.text
     assert "Avatar size" in response.text
     assert "3D globe" not in response.text
-    assert "Time" not in response.text
+    assert re.search(r">\s*Time\s*<", response.text) is None
     assert "recaptcha/api.js" not in response.text
+
+
+def test_index_page_includes_google_tag_manager(tmp_path: Path) -> None:
+    response = TestClient(create_app(settings=make_settings(tmp_path))).get("/")
+    assert response.status_code == 200
+    html = response.text
+    head = html.split("<head>", 1)[1].split("</head>", 1)[0]
+    assert head.count("<!-- Google Tag Manager -->") == 1
+    assert "https://www.googletagmanager.com/gtm.js?id=" in head
+    assert "})(window,document,'script','dataLayer','GTM-KR9D2RPW');" in head
+    assert head.index("<!-- Google Tag Manager -->") < head.index("<title>")
+    body = html.split("<body>", 1)[1]
+    assert body.lstrip().startswith(
+        '<!-- Google Tag Manager (noscript) -->\n'
+        '  <noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-KR9D2RPW"\n'
+        '  height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>'
+    )
+    assert html.count("https://www.googletagmanager.com/ns.html?") == 1
+    assert html.count("GTM-KR9D2RPW") == 2
 
 
 def test_index_page_exposes_upload_limit_to_browser(tmp_path: Path) -> None:
