@@ -196,15 +196,36 @@ def test_render_fails_if_descendant_keeps_stderr_open(
     tmp_path: Path,
     minimal_render: RenderOptions,
 ) -> None:
+    release_stderr = Event()
+    stderr_threads: list[Thread] = []
+    join_timeouts: list[float | None] = []
+
     class BlockingStderr:
         def read(self, _size: int) -> bytes:
-            Event().wait()
+            release_stderr.wait()
             return b""
+
+    class CheckedThread(Thread):
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            super().__init__(*args, **kwargs)
+            if kwargs.get("target") is renderer._drain_stderr:
+                stderr_threads.append(self)
+
+        def join(self, timeout: float | None = None) -> None:
+            if self in stderr_threads:
+                # Check the cleanup contract, not whole-render scheduling speed.
+                join_timeouts.append(timeout)
+                assert timeout == renderer._READER_JOIN_TIMEOUT_SECONDS
+                assert timeout > 0
+            super().join(timeout)
+            if self in stderr_threads:
+                assert self.is_alive()
 
     stdin = BlockingStdin()
     stdin.release.set()
     process = FakeProcess(stdin)
     process.stderr = BlockingStderr()
+    monkeypatch.setattr(renderer, "Thread", CheckedThread)
     monkeypatch.setattr(renderer.subprocess, "Popen", lambda *_args, **_kwargs: process)
     monkeypatch.setattr(renderer.os, "killpg", lambda _pid, _signal: process.kill())
 
@@ -214,13 +235,19 @@ def test_render_fails_if_descendant_keeps_stderr_open(
         return 0
 
     process.wait = successful_wait
-    started = monotonic()
-    with pytest.raises(RuntimeError, match="stderr reader"):
-        renderer.render_route_video([], minimal_render, tmp_path / "video.mp4", object())
+    try:
+        with pytest.raises(RuntimeError, match="stderr reader"):
+            renderer.render_route_video([], minimal_render, tmp_path / "video.mp4", object())
 
-    assert monotonic() - started < 0.2
-    assert not (tmp_path / "video.mp4").exists()
-    assert process.killed
+        assert join_timeouts == [renderer._READER_JOIN_TIMEOUT_SECONDS]
+        assert not (tmp_path / ".video.partial.mp4").exists()
+        assert not (tmp_path / "video.mp4").exists()
+        assert process.killed
+    finally:
+        release_stderr.set()
+        for thread in stderr_threads:
+            Thread.join(thread, timeout=1)
+            assert not thread.is_alive()
 
 
 def test_render_cleans_up_when_thread_start_fails(

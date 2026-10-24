@@ -1,32 +1,33 @@
-# Task Plan: Google Tag Manager installation
+# Task Plan: FFmpeg lifecycle test timing
 
 ## Goal
-Install supplied GTM-KR9D2RPW script once near the start of head and supplied noscript immediately after body, with regression coverage.
+Diagnose cleanup deadlines, fix CI-sensitive stderr-descendant test without losing regression coverage, validate, commit on feature branch, merge main, and push.
 
 ## Phases
-- [x] Phase 1: Inspect template, rendering path, tests, and graph impact
-- [x] Phase 2: Confirm minimal installation approach
-- [x] Phase 3: Install snippets and add regression test on feature branch
-- [x] Phase 4: Run tests, validate diff, and deliver
+- [x] Phase 1: Reproduce and diagnose cleanup timing
+- [x] Phase 2: Confirm root cause with controlled failing regression
+- [x] Phase 3: Apply minimal test fix
+- [ ] Phase 4: Validate, record learning, commit, merge, and push
 
 ## Key Questions
-1. Which template renders the public page?
-2. Are existing tracking tags or content security policy settings relevant?
+1. Does cleanup exceed configured deadlines, or does test measure unrelated scheduling?
+2. Can bounded cleanup be asserted independently of machine speed?
 
 ## Decisions Made
-- Branch: feat/google-tag-manager. No commit, push, or deployment requested.
-- Install head snippet once despite duplicate paste; preserve supplied container ID and code.
-- Replace completed historical task plan for current request; historical plan remains in Git history.
-- Scope is GTM bootstrap installation, not new GA4 event definitions or consent UI.
+- Feature branch: fix/ffmpeg-lifecycle-test-timing.
+- Initial test impact LOW: zero indexed callers/processes; index refreshed after source mismatch.
+- Production code unchanged. Real stderr thread remains blocked until test finally releases it; join must use configured positive timeout exactly once.
+- Keep expected stderr-reader error, process kill, no published output; add partial-output deletion check and thread cleanup.
+- CI log confirms 0.311431385s elapsed. Existing test fails 3/3 with controlled 0.3s pre-render setup delay despite bounded stderr joins of 0.011–0.013s; fixed test passes 3/3 under same delay.
+- Mutation verification rejects unbounded, zero, excessive, skipped joins and missing stderr-reader error. Thirty repeat runs pass with thread count unchanged (1).
 
 ## Errors Encountered
-- New GTM regression test failed before installation as expected (missing head snippet).
-- First full suite: 208 passed, one failed. Existing page test rejected GTM getTime() due broad substring assertion against Time. Narrowed assertion to visible Time label after LOW function impact (zero callers/processes).
+- CI c68839d elapsed assertion failed; local target passed three baseline runs. Root cause: whole-render stopwatch conflates setup/scheduling with cleanup, not incorrect cleanup deadline.
+- Refreshed graph changed indexed branch; first main-qualified context failed, corrected to feature branch.
+- Local .venv lacks Ruff executable; uvx ruff ran identical CI fatal checks successfully.
+- First scratch mutation harness copied module globals before monkeypatches, causing route validation error; execute function against live renderer globals instead.
+- Isolated review agent saw no uncommitted diff; its clean verdict discarded. Agent worktree already absent; main worktree list verified.
+- git diff --check caught extra blank line at plan EOF; removed.
 
 ## Status
-**Complete locally** - 209 tests passed in 3.25 s; one existing Starlette/httpx deprecation warning. Python syntax check and git diff --check passed. Node execution verified single async GTM script insertion with correct URL and timestamped gtm.js dataLayer event. Rendered-response test verifies placement and no duplicate installation. Changes not committed, pushed, or deployed; live network beacons unverified.
-
-## Impact Evidence
-- index.html: LOW, zero indexed direct callers and processes. Literal search confirms app.py renders index.html; no existing GTM or CSP found in source/deployment files.
-- tests/test_api.py: LOW, four direct dependents, zero affected processes. Only a new independent test will be added; shared helpers unchanged.
-- Python Playwright not installed; validate rendered response and execute bootstrap with Node DOM stub. Live beacon/tag configuration remains outside this installation check.
+**Phase 4** - Local verification: 209 passed (3.24s), existing Starlette/httpx deprecation warning only; compileall, pip check, fatal Ruff checks passed. Learning database entry recorded; run graph change analysis, commit feature branch, verify CI before merge/push.
