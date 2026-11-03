@@ -9,7 +9,7 @@ from PIL import Image, ImageDraw
 import gpx_route_generator.renderer as renderer
 
 from gpx_route_generator.geo import lat_lon_to_world_pixel
-from gpx_route_generator.models import RenderOptions, RoutePoint
+from gpx_route_generator.models import AVAILABLE_AVATARS, RenderOptions, RoutePoint
 from gpx_route_generator.renderer import compose_frame, draw_metric_graph, make_arrow
 
 BACKGROUND = (232, 237, 242)
@@ -97,6 +97,38 @@ def test_default_avatar_renders_blob_icon() -> None:
     image = make_arrow(54, "default")
     assert image.size == (54, 54)
     assert image.getchannel("A").getbbox() is not None
+
+
+def test_vehicle_avatars_load_and_scale_to_requested_size() -> None:
+    avatar_ids = {
+        "yellow_car",
+        "train",
+        "race_car",
+        "blue_sports_car",
+        "dark_car",
+    }
+
+    assert avatar_ids <= AVAILABLE_AVATARS.keys()
+    for avatar_id in avatar_ids:
+        image = make_arrow(80, avatar_id)
+        bounds = image.getchannel("A").getbbox()
+
+        assert bounds is not None
+        assert max(bounds[2] - bounds[0], bounds[3] - bounds[1]) == 80
+
+
+def test_vehicle_avatar_fronts_are_normalized_to_north() -> None:
+    expected_front_pixels = {
+        "yellow_car": (255, 206, 11),
+        "train": (187, 192, 202),
+        "race_car": (252, 186, 5),
+        "blue_sports_car": (53, 158, 215),
+        "dark_car": (82, 97, 80),
+    }
+
+    for avatar_id, expected_front in expected_front_pixels.items():
+        image = make_arrow(80, avatar_id)
+        assert image.getpixel((image.width // 2, 4))[:3] == expected_front
 
 
 def test_distance_badge_uses_fixed_top_left_hud_position() -> None:

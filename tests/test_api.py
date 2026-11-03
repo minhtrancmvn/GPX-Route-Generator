@@ -331,6 +331,23 @@ def test_avatar_preview_loads_without_google_api_key(tmp_path: Path) -> None:
     assert response.content.startswith(b"\x89PNG")
 
 
+def test_vehicle_avatar_previews_load_without_google_api_key(tmp_path: Path) -> None:
+    app = create_app(settings=make_settings(tmp_path, api_key=None))
+    client = TestClient(app)
+
+    for avatar_id in (
+        "yellow_car",
+        "train",
+        "race_car",
+        "blue_sports_car",
+        "dark_car",
+    ):
+        response = client.get(f"/api/avatars/{avatar_id}/preview?size=64")
+        assert response.status_code == 200
+        assert response.headers["content-type"] == "image/png"
+        assert response.content.startswith(b"\x89PNG")
+
+
 def test_preview_hides_provider_exception_details(
     tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:

@@ -723,14 +723,23 @@ def make_arrow(size: int, avatar_id: str = "mt15") -> Image.Image:
                 content_box = src.getchannel("A").getbbox()
                 if content_box is not None:
                     src = src.crop(content_box)
-                # Scale so the long axis (image width = front-to-back) matches size
-                aspect = src.width / src.height
-                new_w = size
-                new_h = max(1, int(size / aspect))
-                scaled = src.resize((new_w, new_h), Image.Resampling.LANCZOS)
-                # Motorcycle faces right in image; rotate 90° CCW so it points up (north)
-                upright = scaled.rotate(90, expand=True, resample=Image.Resampling.BICUBIC)
-                _AVATAR_CACHE[cache_key] = upright
+                # Scale the longest visible axis to size, preserving source proportions.
+                scale = size / max(src.size)
+                scaled_size = (
+                    max(1, int(src.width * scale)),
+                    max(1, int(src.height * scale)),
+                )
+                scaled = src.resize(scaled_size, Image.Resampling.LANCZOS)
+                # Normalize each sprite so its front points north before heading rotation.
+                correction = {
+                    "mt15": 90,
+                    "yellow_car": 180,
+                }.get(avatar_id, 0)
+                if correction:
+                    scaled = scaled.rotate(
+                        correction, expand=True, resample=Image.Resampling.BICUBIC
+                    )
+                _AVATAR_CACHE[cache_key] = scaled
             cached = _AVATAR_CACHE[cache_key]
         return cached.copy()
 
