@@ -1,6 +1,6 @@
 # GPX Route Generator
 
-A local FastAPI app that turns a GPX track into a short MP4 route animation using Google Maps Static API backgrounds, a progressive trail, a smoothly-following camera, HUD overlays, and a rotating motorcycle avatar.
+A browser-based FastAPI app that turns a GPX track into a short MP4 route animation using Google Maps Static API backgrounds, a progressive trail, a smoothly-following camera, HUD overlays, and a rotating motorcycle avatar. The responsive interface provides a live first-frame preview, landscape and portrait formats, render progress, and MP4 download.
 
 ## Setup
 
@@ -72,7 +72,12 @@ lsof -ti tcp:8000 | xargs kill
 ./scripts/dev.sh
 ```
 
-Open http://127.0.0.1:8000, upload a GPX file, choose landscape or portrait output, set a 5-30 second duration, and render.
+Open http://127.0.0.1:8000, upload a GPX file, choose landscape or portrait output, set a 5-30 second duration, and render. The first-frame preview updates when you change format or appearance settings; expand **Customize appearance and overlays** for map style, trail, avatar, and HUD options. During rendering, the preview panel shows job progress and exposes the completed video for playback or download.
+
+| Output | Dimensions | Aspect ratio |
+| --- | ---: | ---: |
+| Landscape | 1280 × 720 | 16:9 |
+| Portrait | 720 × 1280 | 9:16 |
 
 ## Docker
 
@@ -127,9 +132,10 @@ For production, put Nginx or Caddy in front of the container for HTTPS and proxy
 
 ## Notes
 
-- V1 is local-only and stores render outputs under `data/jobs/`.
+- Local development stores render outputs under `data/jobs/`; Docker Compose persists them in the named `app-data` volume. Production deployment uses a separate data volume; see [deployment setup](deploy/README.md).
 - Each render automatically plans and temporarily caches up to 12 high-resolution Google Static Map images in memory. Every video frame crops from one cached source image, reducing map requests from one per frame to a small bounded set.
 - Output stays north-up 2D because Google Maps Static API does not provide pitched or 3D camera images.
 - The renderer targets zoom level 14, matching the horizontal scale in supplied reference. Very long routes widen only enough to remain within 12 source images.
 - The renderer automatically follows the moving position while keeping nearby route context visible.
 - The driving avatar is a top-down motorcycle icon (`mt15.png`) that rotates to match the route bearing.
+- The browser preview uses a single map image for the selected format and appearance settings. Final rendering uses the configured map provider and requested output dimensions.
