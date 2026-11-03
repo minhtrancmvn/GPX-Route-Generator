@@ -28,11 +28,11 @@ MAX_CACHED_MAP_REQUESTS = 12
 AVAILABLE_AVATARS = {
     "default": "Default",
     "mt15": "MT-15",
-    "yellow_car": "Yellow Car",
-    "train": "Train",
+    "yellow_car": "Bus",
+    "train": "Pickup",
     "race_car": "Race Car",
-    "blue_sports_car": "Blue Sports Car",
-    "dark_car": "Dark Car",
+    "blue_sports_car": "Sedan",
+    "dark_car": "Police Car",
 }
 
 
