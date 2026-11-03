@@ -255,7 +255,9 @@ def test_dynamic_camera_matches_legacy_windows_for_single_point_windows() -> Non
             )
         )
 
-    assert [state.center_world for state in states] == pytest.approx(legacy_centers, abs=1e-9)
+    assert len(states) == len(legacy_centers)
+    for state, legacy_center in zip(states, legacy_centers):
+        assert state.center_world == pytest.approx(legacy_center, abs=1e-9)
 
 
 def test_dynamic_camera_matches_legacy_dense_window_bounds_after_expiration() -> None:
@@ -300,7 +302,9 @@ def test_dynamic_camera_matches_legacy_dense_window_bounds_after_expiration() ->
             )
         )
 
-    assert [state.center_world for state in states] == pytest.approx(legacy_centers, rel=0, abs=1e-9)
+    assert len(states) == len(legacy_centers)
+    for state, legacy_center in zip(states, legacy_centers):
+        assert state.center_world == pytest.approx(legacy_center, rel=0, abs=1e-9)
 
 
 def test_dynamic_camera_keeps_requested_target_zoom_for_long_drive() -> None:
