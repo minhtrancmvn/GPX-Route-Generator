@@ -164,7 +164,9 @@ def test_dynamic_camera_preserves_nonfinite_distance_behavior(invalid_distance: 
             )
         )
 
-    assert [state.center_world for state in states] == pytest.approx(expected, rel=0, abs=1e-9)
+    assert len(states) == len(expected)
+    for state, expected_center in zip(states, expected):
+        assert state.center_world == pytest.approx(expected_center, rel=0, abs=1e-9)
 
 
 def test_dynamic_camera_preserves_unsorted_distance_behavior() -> None:
@@ -192,7 +194,9 @@ def test_dynamic_camera_preserves_unsorted_distance_behavior() -> None:
             )
         )
 
-    assert [state.center_world for state in states] == pytest.approx(expected, abs=1e-9)
+    assert len(states) == len(expected)
+    for state, expected_center in zip(states, expected):
+        assert state.center_world == pytest.approx(expected_center, abs=1e-9)
 
 
 def test_dynamic_camera_rejects_mismatched_points_and_distances() -> None:
