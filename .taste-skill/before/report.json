@@ -1,0 +1,1453 @@
+{
+ "url": "http://127.0.0.1:8000/",
+ "at": "2026-11-03T09:02:50.447Z",
+ "allow": [],
+ "viewports": [
+  {
+   "width": 1440,
+   "height": 900,
+   "load": "load",
+   "screens": 3,
+   "filled": [
+    0.98,
+    0.74,
+    0.63
+   ],
+   "motion": {
+    "elements": 0,
+    "css": 0,
+    "transitions": 0,
+    "scripted": 0,
+    "videos": 1,
+    "playingVideos": 0
+   },
+   "metrics": {
+    "viewport": {
+     "w": 1440,
+     "h": 900
+    },
+    "page": {
+     "height": 1967,
+     "screens": 2.2,
+     "words": 1637,
+     "img": 2,
+     "video": 1,
+     "canvas": 0,
+     "svg": 5,
+     "sections": 3,
+     "horizontalOverflow": 0,
+     "overflowCulprits": [],
+     "uiFragments": 0,
+     "uiAbuse": false,
+     "realPictures": 0,
+     "videoCount": 0,
+     "uiPictures": 0,
+     "pictureSamples": [],
+     "blendText": 0,
+     "sideScrollers": 0,
+     "brokenImages": [],
+     "emoji": [],
+     "videosNoPoster": 0
+    },
+    "hero": {
+     "text": "來} wt Invalid. Did tool call not get? Need use exact. Hmm actual call syntax as before. Let's try. (What the heck, I just need call it. Probably no state). Let’s do. No more.}]} Output extraneous `來}`",
+     "words": 1665,
+     "chars": 10060,
+     "lines": 63,
+     "size": 36,
+     "vw": 2.5,
+     "font": "DM Sans",
+     "weight": 650,
+     "tracking": -0.04,
+     "leading": 1.2,
+     "top": 0,
+     "tag": "body",
+     "kind": "heading",
+     "align": "left",
+     "position": "left"
+    },
+    "h1": {
+     "text": "Make a route video",
+     "words": 4,
+     "lines": 1,
+     "size": 36,
+     "font": "DM Sans"
+    },
+    "headings": [
+     {
+      "text": "Make a route video",
+      "words": 4,
+      "chars": 18,
+      "lines": 1,
+      "size": 36,
+      "vw": 2.5,
+      "font": "DM Sans",
+      "weight": 650,
+      "tracking": -0.035,
+      "leading": 1.2,
+      "upper": false,
+      "italic": false,
+      "mono": false,
+      "align": "left",
+      "position": "center",
+      "widthRatio": 0.86,
+      "top": 1105,
+      "tag": "h1",
+      "kind": "heading"
+     }
+    ],
+    "headingSummary": {
+     "count": 1,
+     "maxLines": 1,
+     "over2Lines": 0,
+     "statements": 0,
+     "centered": 0,
+     "medianWords": 4,
+     "mixedFontHeadings": 0
+    },
+    "type": {
+     "families": [
+      {
+       "family": "Source Sans 3",
+       "share": 0.94,
+       "mono": false
+      },
+      {
+       "family": "DM Sans",
+       "share": 0.06,
+       "mono": false
+      }
+     ],
+     "familyCount": 2,
+     "sizes": [
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      18,
+      36
+     ],
+     "sizeCount": 8,
+     "notLoaded": [],
+     "body": {
+      "font": "Source Sans 3",
+      "size": 13,
+      "leading": 1.5,
+      "weight": 400,
+      "tracking": 0,
+      "contrast": 5.5
+     },
+     "measureChars": 37,
+     "max": {
+      "size": 36,
+      "vw": 2.5,
+      "font": "DM Sans",
+      "text": "Make a route video"
+     },
+     "monoShare": 0,
+     "monoProseShare": 0,
+     "monoFamilies": [],
+     "monoSamples": [],
+     "microLabels": 0,
+     "microLabelShare": 0,
+     "microSamples": [],
+     "upperShare": 0,
+     "centerShare": 0.3,
+     "smallText": 6
+    },
+    "eyebrows": [
+     {
+      "text": "GPX Route Generator",
+      "above": "Make a route video",
+      "upper": false,
+      "tracked": false,
+      "mono": false,
+      "pill": false,
+      "size": 15,
+      "top": 1029
+     }
+    ],
+    "numbered": [],
+    "color": {
+     "bodyBg": "#edf1ef",
+     "bodyBgHsl": {
+      "h": 150,
+      "s": 0.12,
+      "l": 0.94
+     },
+     "dark": false,
+     "sectionBgs": [
+      {
+       "color": "#fbfcfa",
+       "top": 1202,
+       "hsl": {
+        "h": 90,
+        "s": 0.25,
+        "l": 0.98
+       }
+      }
+     ],
+     "textColors": [
+      {
+       "color": "#1b2a33",
+       "share": 0.52
+      },
+      {
+       "color": "#53636a",
+       "share": 0.28
+      },
+      {
+       "color": "#7a92ad",
+       "share": 0.13
+      },
+      {
+       "color": "#175fae",
+       "share": 0.04
+      },
+      {
+       "color": "#d8e4f4",
+       "share": 0.03
+      }
+     ],
+     "button": {
+      "bg": "#175fae",
+      "hsl": {
+       "h": 211,
+       "s": 0.77,
+       "l": 0.39
+      },
+      "fg": "#ffffff"
+     },
+     "lowContrast": []
+    },
+    "buttons": {
+     "count": 1,
+     "inHero": 0,
+     "radius": 8,
+     "height": 46,
+     "withShadow": 0,
+     "withGradient": 0,
+     "mono": 0,
+     "upper": 0,
+     "heroLabels": []
+    },
+    "surfaces": {
+     "shadowStatic": 0,
+     "shadowOverlay": 0,
+     "shadowSamples": [],
+     "gradients": 0,
+     "scrims": 0,
+     "gradientSamples": [],
+     "gradientText": 0,
+     "hairlines": 4,
+     "hairlineSamples": [
+      "header.site-header 1440px",
+      "div.panel-header 330px",
+      "div.advanced-content 328px",
+      "div.panel-header.preview-header 786px"
+     ],
+     "outlinedBoxes": 5,
+     "dashed": 1,
+     "blurred": 0,
+     "roundedBoxes": 7,
+     "boxRadius": 8,
+     "squareMedia": 0,
+     "roundedMedia": 0,
+     "mediaRadius": 0,
+     "textShadow": 0,
+     "cardRows": []
+    },
+    "heroMedia": [],
+    "nav": {
+     "links": 0,
+     "fixed": false,
+     "height": 65,
+     "floatingPill": false,
+     "blur": false
+    },
+    "fontsLoaded": [
+     "dm sans",
+     "source sans 3"
+    ]
+   },
+   "layout": {
+    "viewport": {
+     "w": 1440,
+     "h": 900
+    },
+    "pageH": 1967,
+    "margins": {
+     "left": 100,
+     "right": 135
+    },
+    "sections": [],
+    "gaps": [],
+    "h1s": [
+     {
+      "text": "Make a route video",
+      "size": 36,
+      "top": 1105,
+      "firstScreen": false
+     }
+    ],
+    "edgeText": [
+     {
+      "text": "來} wt Invalid. Did tool call not get? Need use exa",
+      "side": "left",
+      "px": 0
+     }
+    ],
+    "edges": [
+     {
+      "x": 100,
+      "n": 1
+     },
+     {
+      "x": 125,
+      "n": 1
+     },
+     {
+      "x": 529,
+      "n": 1
+     }
+    ],
+    "leftBlocks": 3,
+    "bodySize": 16,
+    "stage": false,
+    "explains": false,
+    "slivers": [],
+    "voidShare": 0,
+    "voidBox": null
+   },
+   "app": {
+    "viewport": {
+     "w": 1440,
+     "h": 900
+    },
+    "dark": false,
+    "ground": "#edf1ef",
+    "sidebar": null,
+    "topbar": null,
+    "canvas": {
+     "left": 100,
+     "right": 125
+    },
+    "hero": {
+     "text": "來} wt Invalid. Did tool call not get? Need use exact. Hmm actual call syntax as before. Let's try. (What the heck, I just need call it. Probably no state). Let’s do. No more.}]} Output extraneous `來}`",
+     "words": 1665,
+     "chars": 10060,
+     "lines": 63,
+     "size": 36,
+     "vw": 2.5,
+     "font": "DM Sans",
+     "weight": 650,
+     "tracking": -0.04,
+     "leading": 1.2,
+     "top": 0,
+     "tag": "body",
+     "kind": "heading",
+     "align": "left",
+     "position": "left"
+    },
+    "charts": 0,
+    "layout": {
+     "panels": 2,
+     "firstScreen": 0,
+     "ragged": [],
+     "voids": [
+      {
+       "gap": 44,
+       "at": 1842,
+       "panel": "Ready"
+      }
+     ]
+    },
+    "tiles": 0,
+    "panels": {
+     "count": 6,
+     "radii": [
+      [
+       8,
+       4
+      ],
+      [
+       14,
+       2
+      ]
+     ],
+     "heavyBorders": 2,
+     "borderSamples": [
+      "#175fae on #e8f0f6 (5.55:1)",
+      "#d5ddda on #101923 (12.81:1)"
+     ],
+     "heavyShadows": 0,
+     "softShadows": 0,
+     "shadowSamples": [],
+     "glass": 0
+    },
+    "chips": {
+     "count": 1,
+     "hues": 1,
+     "samples": [
+      {
+       "hue": 211,
+       "size": 32,
+       "radius": "8px"
+      }
+     ]
+    },
+    "numbers": {
+     "cells": 0,
+     "leftAligned": 0,
+     "figures": 1,
+     "tabularShare": 0,
+     "kpiMax": 12
+    },
+    "rows": null,
+    "chartHues": 0,
+    "placeholders": [],
+    "type": {
+     "under13": 0.02,
+     "tiny": 0,
+     "tinySamples": [],
+     "sizes": [
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      18,
+      36
+     ]
+    },
+    "title": {
+     "text": "Make a route video",
+     "size": 36,
+     "top": 1105
+    },
+    "colourShare": 0
+   },
+   "consoleErrors": []
+  },
+  {
+   "width": 768,
+   "height": 1024,
+   "load": "load",
+   "screens": 4,
+   "filled": [
+    0.97,
+    0.89,
+    0.92,
+    0.83
+   ],
+   "motion": {
+    "elements": 0,
+    "css": 0,
+    "transitions": 0,
+    "scripted": 0,
+    "videos": 1,
+    "playingVideos": 0
+   },
+   "metrics": {
+    "viewport": {
+     "w": 768,
+     "h": 1024
+    },
+    "page": {
+     "height": 3455,
+     "screens": 3.4,
+     "words": 1637,
+     "img": 2,
+     "video": 1,
+     "canvas": 0,
+     "svg": 5,
+     "sections": 3,
+     "horizontalOverflow": 0,
+     "overflowCulprits": [],
+     "uiFragments": 0,
+     "uiAbuse": false,
+     "realPictures": 0,
+     "videoCount": 0,
+     "uiPictures": 0,
+     "pictureSamples": [],
+     "blendText": 0,
+     "sideScrollers": 0,
+     "brokenImages": [],
+     "emoji": [],
+     "videosNoPoster": 0
+    },
+    "hero": {
+     "text": "來} wt Invalid. Did tool call not get? Need use exact. Hmm actual call syntax as before. Let's try. (What the heck, I just need call it. Probably no state). Let’s do. No more.}]} Output extraneous `來}`",
+     "words": 1665,
+     "chars": 10060,
+     "lines": 109,
+     "size": 28,
+     "vw": 3.6,
+     "font": "DM Sans",
+     "weight": 650,
+     "tracking": -0.03,
+     "leading": 1.2,
+     "top": 0,
+     "tag": "body",
+     "kind": "heading",
+     "align": "left",
+     "position": "left"
+    },
+    "h1": {
+     "text": "Make a route video",
+     "words": 4,
+     "lines": 1,
+     "size": 28,
+     "font": "DM Sans"
+    },
+    "headings": [
+     {
+      "text": "Make a route video",
+      "words": 4,
+      "chars": 18,
+      "lines": 1,
+      "size": 28,
+      "vw": 3.6,
+      "font": "DM Sans",
+      "weight": 650,
+      "tracking": -0.035,
+      "leading": 1.2,
+      "upper": false,
+      "italic": false,
+      "mono": false,
+      "align": "left",
+      "position": "center",
+      "widthRatio": 0.94,
+      "top": 1983,
+      "tag": "h1",
+      "kind": "heading"
+     }
+    ],
+    "headingSummary": {
+     "count": 1,
+     "maxLines": 1,
+     "over2Lines": 0,
+     "statements": 0,
+     "centered": 0,
+     "medianWords": 4,
+     "mixedFontHeadings": 0
+    },
+    "type": {
+     "families": [
+      {
+       "family": "Source Sans 3",
+       "share": 0.94,
+       "mono": false
+      },
+      {
+       "family": "DM Sans",
+       "share": 0.06,
+       "mono": false
+      }
+     ],
+     "familyCount": 2,
+     "sizes": [
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      18,
+      28
+     ],
+     "sizeCount": 8,
+     "notLoaded": [],
+     "body": {
+      "font": "Source Sans 3",
+      "size": 13,
+      "leading": 1.5,
+      "weight": 400,
+      "tracking": 0,
+      "contrast": 5.5
+     },
+     "measureChars": 37,
+     "max": {
+      "size": 28,
+      "vw": 3.6,
+      "font": "DM Sans",
+      "text": "Make a route video"
+     },
+     "monoShare": 0,
+     "monoProseShare": 0,
+     "monoFamilies": [],
+     "monoSamples": [],
+     "microLabels": 0,
+     "microLabelShare": 0,
+     "microSamples": [],
+     "upperShare": 0,
+     "centerShare": 0.3,
+     "smallText": 6
+    },
+    "eyebrows": [
+     {
+      "text": "Local",
+      "above": "Make a route video",
+      "upper": false,
+      "tracked": false,
+      "mono": false,
+      "pill": false,
+      "size": 11,
+      "top": 1917
+     }
+    ],
+    "numbered": [],
+    "color": {
+     "bodyBg": "#edf1ef",
+     "bodyBgHsl": {
+      "h": 150,
+      "s": 0.12,
+      "l": 0.94
+     },
+     "dark": false,
+     "sectionBgs": [
+      {
+       "color": "#fbfcfa",
+       "top": 2738,
+       "hsl": {
+        "h": 90,
+        "s": 0.25,
+        "l": 0.98
+       }
+      },
+      {
+       "color": "#101923",
+       "top": 2224,
+       "hsl": {
+        "h": 212,
+        "s": 0.37,
+        "l": 0.1
+       }
+      }
+     ],
+     "textColors": [
+      {
+       "color": "#1b2a33",
+       "share": 0.52
+      },
+      {
+       "color": "#53636a",
+       "share": 0.28
+      },
+      {
+       "color": "#7a92ad",
+       "share": 0.13
+      },
+      {
+       "color": "#175fae",
+       "share": 0.04
+      },
+      {
+       "color": "#d8e4f4",
+       "share": 0.03
+      }
+     ],
+     "button": {
+      "bg": "#175fae",
+      "hsl": {
+       "h": 211,
+       "s": 0.77,
+       "l": 0.39
+      },
+      "fg": "#ffffff"
+     },
+     "lowContrast": []
+    },
+    "buttons": {
+     "count": 1,
+     "inHero": 0,
+     "radius": 8,
+     "height": 46,
+     "withShadow": 0,
+     "withGradient": 0,
+     "mono": 0,
+     "upper": 0,
+     "heroLabels": []
+    },
+    "surfaces": {
+     "shadowStatic": 0,
+     "shadowOverlay": 0,
+     "shadowSamples": [],
+     "gradients": 0,
+     "scrims": 0,
+     "gradientSamples": [],
+     "gradientText": 0,
+     "hairlines": 4,
+     "hairlineSamples": [
+      "header.site-header 768px",
+      "div.panel-header 670px",
+      "div.advanced-content 668px",
+      "div.panel-header.preview-header 670px"
+     ],
+     "outlinedBoxes": 5,
+     "dashed": 1,
+     "blurred": 0,
+     "roundedBoxes": 7,
+     "boxRadius": 8,
+     "squareMedia": 0,
+     "roundedMedia": 0,
+     "mediaRadius": 0,
+     "textShadow": 0,
+     "cardRows": []
+    },
+    "heroMedia": [],
+    "nav": {
+     "links": 0,
+     "fixed": false,
+     "height": 65,
+     "floatingPill": false,
+     "blur": false
+    },
+    "fontsLoaded": [
+     "dm sans",
+     "source sans 3"
+    ]
+   },
+   "layout": {
+    "viewport": {
+     "w": 768,
+     "h": 1024
+    },
+    "pageH": 3455,
+    "margins": {
+     "left": 24,
+     "right": 49
+    },
+    "sections": [
+     {
+      "sel": "form#render-form.panel.controls",
+      "tag": "form",
+      "top": 2738,
+      "height": 677,
+      "words": 59,
+      "media": 0,
+      "middle": 0,
+      "heading": {
+       "text": "Set up your video",
+       "size": 18,
+       "tag": "h2"
+      },
+      "left": 49,
+      "right": 49,
+      "textLeft": 49,
+      "textRight": 59,
+      "fullBleed": false,
+      "footer": false,
+      "hero": false,
+      "continues": false,
+      "pinned": false
+     },
+     {
+      "sel": "section.panel.status-panel",
+      "tag": "section",
+      "top": 2071,
+      "height": 643,
+      "words": 39,
+      "media": 0,
+      "middle": 145,
+      "heading": {
+       "text": "Ready",
+       "size": 18,
+       "tag": "h2"
+      },
+      "left": 49,
+      "right": 49,
+      "textLeft": 49,
+      "textRight": 49,
+      "fullBleed": false,
+      "footer": true,
+      "hero": false,
+      "continues": false,
+      "pinned": false
+     }
+    ],
+    "gaps": [],
+    "h1s": [
+     {
+      "text": "Make a route video",
+      "size": 28,
+      "top": 1983,
+      "firstScreen": false
+     }
+    ],
+    "edgeText": [
+     {
+      "text": "來} wt Invalid. Did tool call not get? Need use exa",
+      "side": "left",
+      "px": 0
+     }
+    ],
+    "edges": [
+     {
+      "x": 49,
+      "n": 2
+     },
+     {
+      "x": 24,
+      "n": 1
+     }
+    ],
+    "leftBlocks": 3,
+    "bodySize": 16,
+    "stage": false,
+    "explains": false,
+    "slivers": [],
+    "voidShare": 0,
+    "voidBox": null
+   },
+   "app": {
+    "viewport": {
+     "w": 768,
+     "h": 1024
+    },
+    "dark": false,
+    "ground": "#edf1ef",
+    "sidebar": null,
+    "topbar": null,
+    "canvas": {
+     "left": 23,
+     "right": 49
+    },
+    "hero": {
+     "text": "來} wt Invalid. Did tool call not get? Need use exact. Hmm actual call syntax as before. Let's try. (What the heck, I just need call it. Probably no state). Let’s do. No more.}]} Output extraneous `來}`",
+     "words": 1665,
+     "chars": 10060,
+     "lines": 109,
+     "size": 28,
+     "vw": 3.6,
+     "font": "DM Sans",
+     "weight": 650,
+     "tracking": -0.03,
+     "leading": 1.2,
+     "top": 0,
+     "tag": "body",
+     "kind": "heading",
+     "align": "left",
+     "position": "left"
+    },
+    "charts": 0,
+    "layout": {
+     "panels": 2,
+     "firstScreen": 0,
+     "ragged": [],
+     "voids": [
+      {
+       "gap": 44,
+       "at": 2645,
+       "panel": "Ready"
+      }
+     ]
+    },
+    "tiles": 0,
+    "panels": {
+     "count": 6,
+     "radii": [
+      [
+       8,
+       4
+      ],
+      [
+       14,
+       2
+      ]
+     ],
+     "heavyBorders": 2,
+     "borderSamples": [
+      "#175fae on #e8f0f6 (5.55:1)",
+      "#d5ddda on #101923 (12.81:1)"
+     ],
+     "heavyShadows": 0,
+     "softShadows": 0,
+     "shadowSamples": [],
+     "glass": 0
+    },
+    "chips": {
+     "count": 1,
+     "hues": 1,
+     "samples": [
+      {
+       "hue": 211,
+       "size": 32,
+       "radius": "8px"
+      }
+     ]
+    },
+    "numbers": {
+     "cells": 0,
+     "leftAligned": 0,
+     "figures": 1,
+     "tabularShare": 0,
+     "kpiMax": 12
+    },
+    "rows": null,
+    "chartHues": 0,
+    "placeholders": [],
+    "type": {
+     "under13": 0.02,
+     "tiny": 0,
+     "tinySamples": [],
+     "sizes": [
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      18,
+      28
+     ]
+    },
+    "title": {
+     "text": "Make a route video",
+     "size": 28,
+     "top": 1983
+    },
+    "colourShare": 0
+   },
+   "consoleErrors": []
+  },
+  {
+   "width": 390,
+   "height": 844,
+   "load": "load",
+   "screens": 7,
+   "filled": [
+    0.95,
+    0.96,
+    0.96,
+    0.98,
+    0.87,
+    0.9,
+    0.75
+   ],
+   "motion": {
+    "elements": 0,
+    "css": 0,
+    "transitions": 0,
+    "scripted": 0,
+    "videos": 1,
+    "playingVideos": 0
+   },
+   "metrics": {
+    "viewport": {
+     "w": 390,
+     "h": 844
+    },
+    "page": {
+     "height": 5137,
+     "screens": 6.1,
+     "words": 1637,
+     "img": 2,
+     "video": 1,
+     "canvas": 0,
+     "svg": 5,
+     "sections": 3,
+     "horizontalOverflow": 0,
+     "overflowCulprits": [],
+     "uiFragments": 0,
+     "uiAbuse": false,
+     "realPictures": 0,
+     "videoCount": 0,
+     "uiPictures": 0,
+     "pictureSamples": [],
+     "blendText": 0,
+     "sideScrollers": 0,
+     "brokenImages": [],
+     "emoji": [],
+     "videosNoPoster": 0
+    },
+    "hero": {
+     "text": "來} wt Invalid. Did tool call not get? Need use exact. Hmm actual call syntax as before. Let's try. (What the heck, I just need call it. Probably no state). Let’s do. No more.}]} Output extraneous `來}`",
+     "words": 1665,
+     "chars": 10060,
+     "lines": 189,
+     "size": 29,
+     "vw": 7.4,
+     "font": "DM Sans",
+     "weight": 650,
+     "tracking": -0.03,
+     "leading": 1.2,
+     "top": 0,
+     "tag": "body",
+     "kind": "heading",
+     "align": "left",
+     "position": "left"
+    },
+    "h1": {
+     "text": "Make a route video",
+     "words": 4,
+     "lines": 1,
+     "size": 29,
+     "font": "DM Sans"
+    },
+    "headings": [
+     {
+      "text": "Make a route video",
+      "words": 4,
+      "chars": 18,
+      "lines": 1,
+      "size": 29,
+      "vw": 7.4,
+      "font": "DM Sans",
+      "weight": 650,
+      "tracking": -0.035,
+      "leading": 1.2,
+      "upper": false,
+      "italic": false,
+      "mono": false,
+      "align": "left",
+      "position": "center",
+      "widthRatio": 0.92,
+      "top": 3891,
+      "tag": "h1",
+      "kind": "heading"
+     }
+    ],
+    "headingSummary": {
+     "count": 1,
+     "maxLines": 1,
+     "over2Lines": 0,
+     "statements": 0,
+     "centered": 0,
+     "medianWords": 4,
+     "mixedFontHeadings": 0
+    },
+    "type": {
+     "families": [
+      {
+       "family": "Source Sans 3",
+       "share": 0.94,
+       "mono": false
+      },
+      {
+       "family": "DM Sans",
+       "share": 0.06,
+       "mono": false
+      }
+     ],
+     "familyCount": 2,
+     "sizes": [
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      20,
+      29
+     ],
+     "sizeCount": 8,
+     "notLoaded": [],
+     "body": {
+      "font": "Source Sans 3",
+      "size": 12,
+      "leading": 1.5,
+      "weight": 400,
+      "tracking": 0,
+      "contrast": 5.5
+     },
+     "measureChars": 49,
+     "max": {
+      "size": 29,
+      "vw": 7.4,
+      "font": "DM Sans",
+      "text": "Make a route video"
+     },
+     "monoShare": 0,
+     "monoProseShare": 0,
+     "monoFamilies": [],
+     "monoSamples": [],
+     "microLabels": 0,
+     "microLabelShare": 0,
+     "microSamples": [],
+     "upperShare": 0,
+     "centerShare": 0.3,
+     "smallText": 7
+    },
+    "eyebrows": [
+     {
+      "text": "Local",
+      "above": "Make a route video",
+      "upper": false,
+      "tracked": false,
+      "mono": false,
+      "pill": false,
+      "size": 11,
+      "top": 3834
+     }
+    ],
+    "numbered": [],
+    "color": {
+     "bodyBg": "#edf1ef",
+     "bodyBgHsl": {
+      "h": 150,
+      "s": 0.12,
+      "l": 0.94
+     },
+     "dark": false,
+     "sectionBgs": [
+      {
+       "color": "#fbfcfa",
+       "top": 4448,
+       "hsl": {
+        "h": 90,
+        "s": 0.25,
+        "l": 0.98
+       }
+      }
+     ],
+     "textColors": [
+      {
+       "color": "#1b2a33",
+       "share": 0.52
+      },
+      {
+       "color": "#53636a",
+       "share": 0.28
+      },
+      {
+       "color": "#7a92ad",
+       "share": 0.13
+      },
+      {
+       "color": "#175fae",
+       "share": 0.04
+      },
+      {
+       "color": "#d8e4f4",
+       "share": 0.03
+      }
+     ],
+     "button": {
+      "bg": "#175fae",
+      "hsl": {
+       "h": 211,
+       "s": 0.77,
+       "l": 0.39
+      },
+      "fg": "#ffffff"
+     },
+     "lowContrast": []
+    },
+    "buttons": {
+     "count": 1,
+     "inHero": 0,
+     "radius": 8,
+     "height": 46,
+     "withShadow": 0,
+     "withGradient": 0,
+     "mono": 0,
+     "upper": 0,
+     "heroLabels": []
+    },
+    "surfaces": {
+     "shadowStatic": 0,
+     "shadowOverlay": 0,
+     "shadowSamples": [],
+     "gradients": 0,
+     "scrims": 0,
+     "gradientSamples": [],
+     "gradientText": 0,
+     "hairlines": 4,
+     "hairlineSamples": [
+      "header.site-header 390px",
+      "div.panel-header 324px",
+      "div.advanced-content 322px",
+      "div.panel-header.preview-header 324px"
+     ],
+     "outlinedBoxes": 5,
+     "dashed": 1,
+     "blurred": 0,
+     "roundedBoxes": 7,
+     "boxRadius": 8,
+     "squareMedia": 0,
+     "roundedMedia": 0,
+     "mediaRadius": 0,
+     "textShadow": 0,
+     "cardRows": []
+    },
+    "heroMedia": [],
+    "nav": {
+     "links": 0,
+     "fixed": false,
+     "height": 59,
+     "floatingPill": false,
+     "blur": false
+    },
+    "fontsLoaded": [
+     "dm sans",
+     "source sans 3"
+    ]
+   },
+   "layout": {
+    "viewport": {
+     "w": 390,
+     "h": 844
+    },
+    "pageH": 5137,
+    "margins": {
+     "left": 16,
+     "right": 33
+    },
+    "sections": [
+     {
+      "sel": "form#render-form.panel.controls",
+      "tag": "form",
+      "top": 4448,
+      "height": 657,
+      "words": 59,
+      "media": 0,
+      "middle": 0,
+      "heading": {
+       "text": "Set up your video",
+       "size": 20,
+       "tag": "h2"
+      },
+      "left": 33,
+      "right": 33,
+      "textLeft": 33,
+      "textRight": 43,
+      "fullBleed": false,
+      "footer": false,
+      "hero": false,
+      "continues": false,
+      "pinned": false
+     },
+     {
+      "sel": "section.panel.status-panel",
+      "tag": "section",
+      "top": 3998,
+      "height": 426,
+      "words": 39,
+      "media": 0,
+      "middle": 0,
+      "heading": {
+       "text": "Ready",
+       "size": 20,
+       "tag": "h2"
+      },
+      "left": 33,
+      "right": 33,
+      "textLeft": 33,
+      "textRight": 33,
+      "fullBleed": false,
+      "footer": true,
+      "hero": false,
+      "continues": false,
+      "pinned": false
+     }
+    ],
+    "gaps": [],
+    "h1s": [
+     {
+      "text": "Make a route video",
+      "size": 29,
+      "top": 3891,
+      "firstScreen": false
+     }
+    ],
+    "edgeText": [
+     {
+      "text": "來} wt Invalid. Did tool call not get? Need use exa",
+      "side": "left",
+      "px": 0
+     }
+    ],
+    "edges": [
+     {
+      "x": 33,
+      "n": 2
+     },
+     {
+      "x": 16,
+      "n": 1
+     }
+    ],
+    "leftBlocks": 3,
+    "bodySize": 16,
+    "stage": false,
+    "explains": false,
+    "slivers": [],
+    "voidShare": 0,
+    "voidBox": null
+   },
+   "app": {
+    "viewport": {
+     "w": 390,
+     "h": 844
+    },
+    "dark": false,
+    "ground": "#edf1ef",
+    "sidebar": null,
+    "topbar": null,
+    "canvas": {
+     "left": 16,
+     "right": 33
+    },
+    "hero": {
+     "text": "來} wt Invalid. Did tool call not get? Need use exact. Hmm actual call syntax as before. Let's try. (What the heck, I just need call it. Probably no state). Let’s do. No more.}]} Output extraneous `來}`",
+     "words": 1665,
+     "chars": 10060,
+     "lines": 189,
+     "size": 29,
+     "vw": 7.4,
+     "font": "DM Sans",
+     "weight": 650,
+     "tracking": -0.03,
+     "leading": 1.2,
+     "top": 0,
+     "tag": "body",
+     "kind": "heading",
+     "align": "left",
+     "position": "left"
+    },
+    "charts": 0,
+    "layout": {
+     "panels": 2,
+     "firstScreen": 0,
+     "ragged": [],
+     "voids": [
+      {
+       "gap": 45,
+       "at": 4363,
+       "panel": "Ready"
+      }
+     ]
+    },
+    "tiles": 0,
+    "panels": {
+     "count": 6,
+     "radii": [
+      [
+       8,
+       4
+      ],
+      [
+       14,
+       2
+      ]
+     ],
+     "heavyBorders": 2,
+     "borderSamples": [
+      "#175fae on #e8f0f6 (5.55:1)",
+      "#d5ddda on #101923 (12.81:1)"
+     ],
+     "heavyShadows": 0,
+     "softShadows": 0,
+     "shadowSamples": [],
+     "glass": 0
+    },
+    "chips": {
+     "count": 1,
+     "hues": 1,
+     "samples": [
+      {
+       "hue": 211,
+       "size": 32,
+       "radius": "8px"
+      }
+     ]
+    },
+    "numbers": {
+     "cells": 0,
+     "leftAligned": 0,
+     "figures": 1,
+     "tabularShare": 0,
+     "kpiMax": 11
+    },
+    "rows": null,
+    "chartHues": 0,
+    "placeholders": [],
+    "type": {
+     "under13": 0.03,
+     "tiny": 0,
+     "tinySamples": [],
+     "sizes": [
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      20,
+      29
+     ]
+    },
+    "title": {
+     "text": "Make a route video",
+     "size": 29,
+     "top": 3891
+    },
+    "colourShare": 0
+   },
+   "consoleErrors": []
+  }
+ ],
+ "findings": [
+  {
+   "level": "FAIL",
+   "id": "edge-text",
+   "width": 1440,
+   "message": "1 text block(s) sit within 16px of the screen edge: \"來} wt Invalid. Did tool call n\" (0px from the left)",
+   "fix": "Keep text inside the page margin (16–32px or more). Only display type deliberately bled past the edge may touch it.",
+   "alsoAt": [
+    768,
+    390
+   ]
+  },
+  {
+   "level": "WARN",
+   "id": "panel-void",
+   "width": 1440,
+   "message": "1 card(s) hold a blank band inside: 44px in \"Ready\".",
+   "fix": "A card stretches to its neighbour only when it has content to fill. Keep a legend or a note directly under its chart (only an action or a total may sit at a stretched card's foot), let a short card keep its own height (align-items: start), and let a filtered block shrink to its rows."
+  },
+  {
+   "level": "WARN",
+   "id": "app-title-size",
+   "width": 1440,
+   "message": "The h1 is 36px (\"Make a route video\").",
+   "fix": "An app screen is not a landing page: the title is 18-32px (20-24px on a phone).",
+   "alsoAt": [
+    390
+   ]
+  }
+ ],
+ "images": [
+  {
+   "viewport": "desktop",
+   "width": 1440,
+   "fold": "/Users/coffeemug/Programming/GPX Route Generator/.taste-skill/before/desktop-fold.jpg",
+   "pages": [
+    "/Users/coffeemug/Programming/GPX Route Generator/.taste-skill/before/desktop-page-01.jpg"
+   ],
+   "film": []
+  },
+  {
+   "viewport": "tablet",
+   "width": 768,
+   "fold": "/Users/coffeemug/Programming/GPX Route Generator/.taste-skill/before/tablet-fold.jpg",
+   "pages": [
+    "/Users/coffeemug/Programming/GPX Route Generator/.taste-skill/before/tablet-page-01.jpg"
+   ],
+   "film": []
+  },
+  {
+   "viewport": "mobile",
+   "width": 390,
+   "fold": "/Users/coffeemug/Programming/GPX Route Generator/.taste-skill/before/mobile-fold.jpg",
+   "pages": [
+    "/Users/coffeemug/Programming/GPX Route Generator/.taste-skill/before/mobile-page-01.jpg"
+   ],
+   "film": []
+  }
+ ]
+}

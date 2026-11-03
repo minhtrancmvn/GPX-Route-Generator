@@ -1,0 +1,23 @@
+TASTESKILL · INSPECT   http://127.0.0.1:8000/
+
+MEASURED (first viewport listed)
+  hero headline   "Make a route video"  4 words · 1 line(s) · 30px (2.1vw) · DM Sans 650 · tracking -0.04em · leading 1.2
+  @768px          1 line(s) · 30px
+  @390px          1 line(s) · 24px
+  typefaces       Source Sans 3 94%, DM Sans 6%
+  sizes in use    11 / 12 / 13 / 14 / 15 / 16 / 18 / 30 px   body 13px / 1.5
+  colour          page #edf1ef · sections #fbfcfa · button #175fae
+  page            1.1 screens · 114 words · 2 images · hero media none
+  headings        1 · longest 1 line(s) · median - words
+
+FINDINGS  none. Measurements are clean — now judge the pictures.
+LOOK AT THE RENDER — open these with your image viewer / Read tool before saying anything about quality:
+  desktop 1440px  .taste-skill/final/desktop-fold.jpg
+                  .taste-skill/final/desktop-page-01.jpg
+  tablet 768px    .taste-skill/final/tablet-fold.jpg
+                  .taste-skill/final/tablet-page-01.jpg
+  mobile 390px    .taste-skill/final/mobile-fold.jpg
+                  .taste-skill/final/mobile-page-01.jpg
+
+report: .taste-skill/final/report.json
+RESULT: 0 FAIL, 0 WARN — measurements pass. Passing the meter is the floor, not the grade: score the screenshots with references/critique.md.
