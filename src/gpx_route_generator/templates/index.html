@@ -11,6 +11,9 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>GPX Route Generator</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Source+Sans+3:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="{{ url_for('static', path='styles.css') }}">
 </head>
 <body>
@@ -34,19 +37,23 @@
   </header>
 
   <main class="app-shell">
+    <section class="app-intro" aria-labelledby="page-title">
+      <h1 id="page-title">Make a route video</h1>
+      <p>Preview your track, choose a format, then render your MP4.</p>
+    </section>
     <section class="workspace">
-      <form id="render-form" class="panel controls">
+      <form id="render-form" class="panel controls" aria-label="Route video settings">
         <div class="panel-header">
           <div>
             <p class="eyebrow">Video settings</p>
-            <h1>2D map animation</h1>
+            <h2>Set up your video</h2>
           </div>
-          <span class="badge" id="request-estimate">up to 12 Google map images</span>
+          <span class="badge" id="request-estimate">Preview uses one map image</span>
         </div>
 
         <!-- GPX file upload -->
-        <div class="field" style="margin-bottom: 16px;">
-          <span>GPX file</span>
+        <div class="field upload-field">
+          <span>Choose a GPX file</span>
           <label class="file-drop-zone" id="drop-zone">
             <input id="gpx-file" name="gpx_file" type="file" accept=".gpx,application/gpx+xml,text/xml" required>
             <svg class="drop-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
@@ -59,8 +66,8 @@
         </div>
 
         <!-- Output format -->
-        <fieldset class="field">
-          <legend>Output format</legend>
+        <fieldset class="field format-field">
+          <legend>Video format</legend>
           <div class="format-grid">
             <label class="format-option">
               <input type="radio" name="output_format" value="landscape" checked>
@@ -80,7 +87,7 @@
         <!-- Duration & FPS -->
         <div class="split">
           <label class="field">
-            <span>Duration (sec)</span>
+            <span>Video length (seconds)</span>
             <input id="duration" name="duration_seconds" type="number" min="5" max="30" step="1" value="10" required>
           </label>
           <label class="field">
@@ -91,7 +98,7 @@
 
         <!-- Advanced controls -->
         <details class="advanced">
-          <summary>Advanced controls</summary>
+          <summary>Customize appearance and overlays</summary>
           <div class="advanced-content">
             <div class="advanced-grid">
               <label class="field">
@@ -110,7 +117,7 @@
               <label class="field">
                 <span>Avatar</span>
                 <select id="avatar-select" name="avatar_id">
-                 {% for avatar_id, avatar_label in avatars.items() %}
+                  {% for avatar_id, avatar_label in avatars.items() %}
                   <option value="{{ avatar_id }}" {% if avatar_id == "default" %}selected{% endif %}>{{ avatar_label }}</option>
                   {% endfor %}
                 </select>
@@ -133,7 +140,6 @@
                   </span>
                 </div>
               </label>
-
             </div>
 
             <div class="toggle-grid" style="margin-top: 12px;">
@@ -145,30 +151,32 @@
           </div>
         </details>
 
+        <p class="upload-privacy-note">Your GPX file is used to generate the preview and video.</p>
         <button class="primary-button" id="render-button" type="submit">
           <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M6 3.5l7 4.5-7 4.5V3.5Z"/></svg>
           Render MP4
         </button>
       </form>
 
-      <section class="panel status-panel">
-        <div class="panel-header">
+      <section class="panel status-panel" aria-label="Preview and render status">
+        <div class="panel-header preview-header">
           <div>
-            <p class="eyebrow">Output</p>
+            <p class="eyebrow">Route preview</p>
             <h2 id="status-title">Ready</h2>
+            <p class="panel-description preview-description" id="preview-description">Your first frame appears here after file upload.</p>
           </div>
           <span class="badge muted" id="format-badge">1280 × 720</span>
         </div>
 
-        <div class="video-stage" id="video-stage">
+        <div class="video-stage" id="video-stage" aria-live="polite">
           <div class="empty-state" id="empty-state">
-            <div class="empty-icon">
-              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#7a92ad" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
-                <polygon points="5 3 19 12 5 21 5 3"/>
+            <div class="empty-icon" aria-hidden="true">
+              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M4 18 9 5l6 14 5-14"/><path d="M3 12h18"/>
               </svg>
             </div>
-            <strong>No render yet</strong>
-            <span>Upload a GPX file to preview the first frame, then click Render MP4 when settings look right.</span>
+            <strong>Your route preview</strong>
+            <span>Choose a GPX file to see its first frame. Adjust format or appearance, then render your MP4.</span>
           </div>
 
           <img id="preview-image" class="preview-image" alt="First frame preview" hidden>
@@ -182,14 +190,14 @@
         </div>
 
         <div class="progress-wrap">
-          <div class="progress-bar"><span id="progress-fill"></span></div>
+          <div class="progress-bar" role="progressbar" aria-label="Video render progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span id="progress-fill"></span></div>
           <div class="progress-meta">
             <span id="progress-label">0%</span>
-            <span id="request-label">0 actual requests</span>
+            <span id="request-label">0 map requests</span>
           </div>
         </div>
 
-        <p class="message" id="message"></p>
+        <p class="message" id="message" role="status"></p>
         <a class="download-link" id="download-link" href="#" hidden>
           <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M8 12l-5-5h3V2h4v5h3l-5 5ZM2 14h12v-1.5H2V14Z"/></svg>
           Download MP4

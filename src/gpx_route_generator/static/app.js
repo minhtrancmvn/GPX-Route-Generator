@@ -151,12 +151,15 @@ async function fetchPreview() {
 }
 
 function updateEstimate() {
-  requestEstimate.textContent = "up to 12 Google map images";
+  requestEstimate.textContent = gpxFileInput.files[0]
+    ? "Preview updates when settings change"
+    : "Preview uses one map image";
 }
 
 function updateFormatBadge() {
   const value = new FormData(form).get("output_format") || "landscape";
   formatBadge.textContent = dimensions[value];
+  videoStage.classList.toggle("portrait", value === "portrait");
 }
 
 function clampNumber(value, minimum, maximum, fallback) {
@@ -180,8 +183,9 @@ function updateSizePreviews() {
 function setProgress(progress, actualRequests) {
   const percent = Math.round((progress || 0) * 100);
   progressFill.style.width = `${percent}%`;
+  progressFill.parentElement.setAttribute("aria-valuenow", String(percent));
   progressLabel.textContent = `${percent}%`;
-  requestLabel.textContent = `${actualRequests || 0} actual requests`;
+  requestLabel.textContent = `${actualRequests || 0} map requests`;
 }
 
 function setMessage(text, type = "") {
