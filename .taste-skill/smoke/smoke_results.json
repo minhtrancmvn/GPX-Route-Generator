@@ -1,0 +1,291 @@
+{
+  "timestamp": "2026-11-03T09:39:00.987Z",
+  "server": {
+    "url": "http://127.0.0.1:8001",
+    "pid": 29912,
+    "started": true,
+    "config": {
+      "has_google_maps_key": true,
+      "avatars": {
+        "default": "Default",
+        "mt15": "MT-15"
+      },
+      "recaptcha_enabled": false,
+      "recaptcha_site_key": null
+    }
+  },
+  "steps": [
+    {
+      "name": "00_start_server",
+      "success": true,
+      "config": {
+        "has_google_maps_key": true,
+        "avatars": {
+          "default": "Default",
+          "mt15": "MT-15"
+        },
+        "recaptcha_enabled": false,
+        "recaptcha_site_key": null
+      },
+      "pid": 29912
+    },
+    {
+      "name": "01_initial_landing",
+      "success": true,
+      "title": "GPX Route Generator",
+      "statusTitle": "Ready",
+      "formatBadge": "1280 × 720",
+      "emptyStateVisible": true,
+      "previewImageHidden": true,
+      "previewVideoHidden": true,
+      "renderButtonDisabled": false
+    },
+    {
+      "name": "02_invalid_gpx_error",
+      "success": true,
+      "errorMessage": "Preview failed: GPX route must contain at least two track points."
+    },
+    {
+      "name": "03_landscape_preview",
+      "success": true,
+      "previewSrc": "blob:http://127.0.0.1:8001/ad8fdf9f-79a2-47a9-99f8-3ad940fbfae7",
+      "width": 1280,
+      "height": 720,
+      "codec": "png"
+    },
+    {
+      "name": "04_portrait_format_switch",
+      "success": true,
+      "width": 720,
+      "height": 1280,
+      "codec": "png"
+    },
+    {
+      "name": "05_advanced_settings",
+      "success": true,
+      "trailPreviewHeight": "10px",
+      "avatarPreviewSrc": "http://127.0.0.1:8001/api/avatars/mt15/preview?size=60",
+      "detailsOpen": true
+    },
+    {
+      "name": "06_render_portrait_job",
+      "success": true,
+      "renderDetails": {
+        "statusTitle": "Completed",
+        "ariaValuenow": "100",
+        "progressFillWidth": "100%",
+        "progressLabel": "100%",
+        "requestLabel": "1 map requests",
+        "message": "Render complete.",
+        "spinnerLabel": "Rendering…",
+        "videoHidden": false,
+        "videoSrc": "/api/jobs/62323a080ada4ef7bad77eb45dc5713d/video",
+        "downloadHidden": false,
+        "downloadHref": "/api/jobs/62323a080ada4ef7bad77eb45dc5713d/video",
+        "buttonDisabled": false
+      },
+      "progressHistorySample": [
+        {
+          "elapsedMs": 0,
+          "status": "Running",
+          "valuenow": "0",
+          "label": "0%",
+          "msg": "0 of 30 frames rendered."
+        },
+        {
+          "elapsedMs": 1000,
+          "status": "Completed",
+          "valuenow": "100",
+          "label": "100%",
+          "msg": "Render complete."
+        }
+      ]
+    },
+    {
+      "name": "07_portrait_video_playback_and_download",
+      "success": true,
+      "httpStatus": 200,
+      "fileBytes": 33232,
+      "width": 720,
+      "height": 1280,
+      "duration": 5,
+      "codec": "h264",
+      "playback": {
+        "playing": true,
+        "currentTime": 0.0002,
+        "duration": 5
+      }
+    },
+    {
+      "name": "08_landscape_video_render_and_download",
+      "success": true,
+      "httpStatus": 200,
+      "fileBytes": 37972,
+      "width": 1280,
+      "height": 720,
+      "duration": 5,
+      "codec": "h264"
+    }
+  ],
+  "ffprobe": {
+    "preview_landscape": {
+      "programs": [],
+      "stream_groups": [],
+      "streams": [
+        {
+          "codec_name": "png",
+          "width": 1280,
+          "height": 720,
+          "r_frame_rate": "25/1"
+        }
+      ],
+      "format": {
+        "format_name": "png_pipe"
+      }
+    },
+    "preview_portrait": {
+      "programs": [],
+      "stream_groups": [],
+      "streams": [
+        {
+          "codec_name": "png",
+          "width": 720,
+          "height": 1280,
+          "r_frame_rate": "25/1"
+        }
+      ],
+      "format": {
+        "format_name": "png_pipe"
+      }
+    },
+    "video_portrait": {
+      "programs": [],
+      "stream_groups": [],
+      "streams": [
+        {
+          "codec_name": "h264",
+          "width": 720,
+          "height": 1280,
+          "r_frame_rate": "6/1",
+          "duration": "5.000000"
+        }
+      ],
+      "format": {
+        "format_name": "mov,mp4,m4a,3gp,3g2,mj2",
+        "duration": "5.000000"
+      }
+    },
+    "video_landscape": {
+      "programs": [],
+      "stream_groups": [],
+      "streams": [
+        {
+          "codec_name": "h264",
+          "width": 1280,
+          "height": 720,
+          "r_frame_rate": "6/1",
+          "duration": "5.000000"
+        }
+      ],
+      "format": {
+        "format_name": "mov,mp4,m4a,3gp,3g2,mj2",
+        "duration": "5.000000"
+      }
+    }
+  },
+  "consoleErrors": [],
+  "networkResponses": [
+    {
+      "url": "http://127.0.0.1:8001/api/avatars/default/preview?size=54",
+      "status": 200,
+      "statusText": "OK",
+      "mimeType": "image/png"
+    },
+    {
+      "url": "http://127.0.0.1:8001/api/preview",
+      "status": 422,
+      "statusText": "Unprocessable Content",
+      "mimeType": "application/json"
+    },
+    {
+      "url": "http://127.0.0.1:8001/api/preview",
+      "status": 200,
+      "statusText": "OK",
+      "mimeType": "image/png"
+    },
+    {
+      "url": "http://127.0.0.1:8001/api/preview",
+      "status": 200,
+      "statusText": "OK",
+      "mimeType": "image/png"
+    },
+    {
+      "url": "http://127.0.0.1:8001/api/avatars/mt15/preview?size=60",
+      "status": 200,
+      "statusText": "OK",
+      "mimeType": "image/png"
+    },
+    {
+      "url": "http://127.0.0.1:8001/api/preview",
+      "status": 200,
+      "statusText": "OK",
+      "mimeType": "image/png"
+    },
+    {
+      "url": "http://127.0.0.1:8001/api/render",
+      "status": 202,
+      "statusText": "Accepted",
+      "mimeType": "application/json"
+    },
+    {
+      "url": "http://127.0.0.1:8001/api/jobs/62323a080ada4ef7bad77eb45dc5713d",
+      "status": 200,
+      "statusText": "OK",
+      "mimeType": "application/json"
+    },
+    {
+      "url": "http://127.0.0.1:8001/api/jobs/62323a080ada4ef7bad77eb45dc5713d",
+      "status": 200,
+      "statusText": "OK",
+      "mimeType": "application/json"
+    },
+    {
+      "url": "http://127.0.0.1:8001/api/jobs/62323a080ada4ef7bad77eb45dc5713d/video",
+      "status": 206,
+      "statusText": "Partial Content",
+      "mimeType": "video/mp4"
+    },
+    {
+      "url": "http://127.0.0.1:8001/api/preview",
+      "status": 200,
+      "statusText": "OK",
+      "mimeType": "image/png"
+    },
+    {
+      "url": "http://127.0.0.1:8001/api/render",
+      "status": 202,
+      "statusText": "Accepted",
+      "mimeType": "application/json"
+    },
+    {
+      "url": "http://127.0.0.1:8001/api/jobs/4b1f519a95da426297fc79f2435781ca",
+      "status": 200,
+      "statusText": "OK",
+      "mimeType": "application/json"
+    },
+    {
+      "url": "http://127.0.0.1:8001/api/jobs/4b1f519a95da426297fc79f2435781ca",
+      "status": 200,
+      "statusText": "OK",
+      "mimeType": "application/json"
+    },
+    {
+      "url": "http://127.0.0.1:8001/api/jobs/4b1f519a95da426297fc79f2435781ca/video",
+      "status": 206,
+      "statusText": "Partial Content",
+      "mimeType": "video/mp4"
+    }
+  ],
+  "passed": true,
+  "failures": []
+}

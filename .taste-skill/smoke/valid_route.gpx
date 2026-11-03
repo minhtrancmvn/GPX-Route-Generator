@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="synthetic-smoke-test" xmlns="http://www.topografix.com/GPX/1/1">
+  <metadata>
+    <name>Synthetic Smoke Test Route</name>
+    <desc>Synthetic labeled route for automated UI smoke verification</desc>
+  </metadata>
+  <trk>
+    <name>Synthetic City Loop</name>
+    <trkseg>
+      <trkpt lat="37.7749" lon="-122.4194"><ele>15.0</ele><time>2026-01-01T08:00:00Z</time></trkpt>
+      <trkpt lat="37.7760" lon="-122.4175"><ele>18.5</ele><time>2026-01-01T08:01:00Z</time></trkpt>
+      <trkpt lat="37.7772" lon="-122.4150"><ele>22.0</ele><time>2026-01-01T08:02:00Z</time></trkpt>
+      <trkpt lat="37.7785" lon="-122.4130"><ele>26.5</ele><time>2026-01-01T08:03:00Z</time></trkpt>
+      <trkpt lat="37.7798" lon="-122.4110"><ele>30.0</ele><time>2026-01-01T08:04:00Z</time></trkpt>
+    </trkseg>
+  </trk>
+</gpx>

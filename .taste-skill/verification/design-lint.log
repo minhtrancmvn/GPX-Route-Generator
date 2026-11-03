@@ -1,0 +1,12 @@
+TASTESKILL · LINT   3 file(s)
+
+WARN
+  [eyebrow] Eyebrow / kicker label above a heading.  (3×)
+      src/gpx_route_generator/templates/index.html:48  class="eyebrow
+      src/gpx_route_generator/templates/index.html:164  class="eyebrow
+      src/gpx_route_generator/static/styles.css:198  .eyebrow {
+  [shadow] Shadow. Elements at rest carry none; only real overlays (menu, dialog, sticky bar) may.  (1×)
+      src/gpx_route_generator/static/styles.css:342  box-shadow:
+
+RESULT: 0 FAIL, 4 WARN
+Interface fragments marked data-ui keep their own borders and shadows. Any other line that must keep a flagged pattern for a real reason can carry the comment taste-skill-ignore.
