@@ -42,7 +42,8 @@ def test_production_compose_fails_closed_and_persists_jobs() -> None:
     assert compose["volumes"]["app-data"]["name"] == "gpx-route-generator-data"
     assert app["restart"] == "unless-stopped"
     assert "healthcheck" in app
-    assert "build" in app
+    # The host's own copy of this file runs; the uploaded release is only the build context.
+    assert app["build"]["context"].startswith("${GPX_RELEASE:?")
 
 
 def test_health_probe_checks_application_identity_and_protection() -> None:
@@ -57,28 +58,48 @@ def test_health_probe_checks_application_identity_and_protection() -> None:
 def test_deploy_uses_host_key_verification_and_never_uploads_local_env() -> None:
     workflow = (ROOT / ".github/workflows/deploy.yml").read_text()
     assert "StrictHostKeyChecking=yes" in workflow
+    assert "IdentitiesOnly=yes" in workflow
     assert "SSH_KNOWN_HOSTS" in workflow
-    assert 'git archive --format=tar' in workflow
+    assert 'git archive --format=tar.gz' in workflow
     assert '"$DEPLOY_SHA"' in workflow
     assert 'tar --exclude' not in workflow
     script = (ROOT / "deploy/deploy.sh").read_text()
-    assert 'GPX_ENV_FILE="$root/.env"' in script
-    assert 'ln -sfn "$GPX_ENV_FILE" "$release/.env"' in script
+    assert 'env_file="$root/.env"' in script
     assert "Production .env must have mode 600" in script
     assert 'readlink -f "$root/current"' in script
     assert "ssh-keyscan" not in workflow
     assert "StrictHostKeyChecking=no" not in workflow
     assert "head_sha" in workflow
     assert "gh api" in workflow
-    assert "git archive --format=tar" in workflow
     assert workflow.count('gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main"') == 2
+
+
+def test_ci_only_talks_to_the_deploy_gate() -> None:
+    workflow = (ROOT / ".github/workflows/deploy.yml").read_text()
+    assert "DEPLOY_GATE: /opt/gpx-route-generator/deploy/deploy-gate" in workflow
+    assert '"$DEPLOY_GATE upload $DEPLOY_SHA"' in workflow
+    assert '"$DEPLOY_GATE activate $DEPLOY_SHA"' in workflow
+    # No remote shell commands: the pinned key can't run them, and nothing from the upload may run.
+    for forbidden in ("mkdir -p", "tar -x", "bash '", "deploy/deploy.sh"):
+        assert forbidden not in workflow
+
+
+def test_host_scripts_never_run_release_files_or_sudo() -> None:
+    script = (ROOT / "deploy/deploy.sh").read_text()
+    assert "root=/opt/gpx-route-generator" in script
+    assert 'compose_file="$root/deploy/compose.production.yml"' in script
+    assert "$release/deploy" not in script
+    assert "sudo" not in script
+    gate = (ROOT / "deploy/deploy-gate.sh").read_text()
+    assert 'exec bash "$ROOT/deploy/deploy.sh" "$RELEASE_ID"' in gate
+    assert "$RELEASE_ID/" not in gate  # never runs anything from inside a release
 
 
 def test_rollback_resolves_relative_current_symlink() -> None:
     script = (ROOT / "deploy/deploy.sh").read_text()
     assert 'readlink -f "$root/current"' in script
     assert 'up --detach --no-build --wait --wait-timeout 120' in script
-    assert script.index('"${compose[@]}" build --pull') < script.index('"${compose[@]}" up')
+    assert script.index('"${compose[@]}" build --pull') < script.index('"${compose[@]}" up --detach --remove-orphans')
     assert script.rindex('"${compose[@]}" up --detach --remove-orphans') < script.rindex('ln -sfn "$release"')
 
 
@@ -99,46 +120,40 @@ def test_health_probe_rejects_unprotected_or_wrong_app(monkeypatch, body, health
             exec(probe, {})
 
 
-@pytest.mark.parametrize("root,sha,message", [
-    ("/opt/gpx-route-generator", "a" * 40, "Invalid deployment root"),
-    ("/home/ubuntu/gpx-route-generator", "not-a-sha", "Invalid commit SHA"),
-])
-def test_activation_rejects_invalid_arguments_before_docker(root, sha, message) -> None:
+@pytest.mark.parametrize("sha", ["not-a-sha", "a" * 39, "../" + "a" * 37, "A" * 40])
+def test_activation_rejects_invalid_arguments_before_docker(sha) -> None:
     result = subprocess.run(
-        ["bash", str(ROOT / "deploy/deploy.sh"), root, sha],
+        ["bash", str(ROOT / "deploy/deploy.sh"), sha],
         capture_output=True, text=True, check=False,
     )
     assert result.returncode == 1
-    assert message in result.stderr
+    assert "Invalid commit SHA" in result.stderr
 
 
-def test_default_vhost_redirects_unknown_hosts_without_proxying_waybill() -> None:
-    config = (ROOT / "deploy/nginx-default.conf").read_text()
-    assert "listen 80 default_server;" in config
-    assert "listen 443 ssl default_server;" in config
-    assert config.count("return 302 https://minhtran.id.vn;") == 2
-    assert "proxy_pass" not in config
+@pytest.mark.parametrize("args,forced", [
+    ([], None),
+    (["upload", "abc"], None),
+    (["activate", "../../etc"], None),
+    (["upload", "a" * 40, "extra"], None),
+    (["remove", "a" * 40], None),
+    ([], "bash -c id"),
+    ([], "upload " + "a" * 40 + "; id"),
+    ([], "/opt/gpx-route-generator/deploy/deploy-gate activate $(id)"),
+])
+def test_gate_refuses_anything_but_upload_or_activate_of_a_sha(args, forced) -> None:
+    env = {"PATH": "/usr/bin:/bin"}
+    if forced is not None:
+        env["SSH_ORIGINAL_COMMAND"] = forced
+    result = subprocess.run(
+        ["bash", str(ROOT / "deploy/deploy-gate.sh"), *args],
+        capture_output=True, text=True, check=False, env=env, stdin=subprocess.DEVNULL,
+    )
+    assert result.returncode == 2
 
 
-def test_gpx_vhost_routes_only_named_host_and_preserves_acme_challenge() -> None:
-    config = (ROOT / "deploy/nginx-gpx.conf").read_text()
-    assert config.count("server_name gpx-route-generator.minhtran.id.vn;") == 2
-    assert "default_server" not in config
-    assert "proxy_pass http://127.0.0.1:8001;" in config
-    assert "location ^~ /.well-known/acme-challenge/" in config
-    # Above the 10 MiB app limit plus multipart overhead, so the app returns its own 413.
-    assert "client_max_body_size 11m;" in config
-
-
-def test_upload_vhost_is_direct_and_only_accepts_uploads_from_the_site() -> None:
-    config = (ROOT / "deploy/nginx-gpx.conf").read_text()
-    upload = config[config.index("server_name gpx-upload.minhtran.id.vn;"):]
-    assert upload.count("server_name gpx-upload.minhtran.id.vn;") == 2
-    assert "/etc/letsencrypt/live/gpx-upload.minhtran.id.vn/fullchain.pem" in upload
-    assert 'add_header Access-Control-Allow-Origin "https://gpx-route-generator.minhtran.id.vn" always;' in upload
-    assert "location = /api/preview" in upload and "location = /api/render" in upload
-    assert upload.count("proxy_pass http://127.0.0.1:8001;") == 2
-    assert upload.count("limit_except POST") == 2
-    assert "client_max_body_size 11m;" in upload
-    assert "location ^~ /.well-known/acme-challenge/" in upload
-    assert "location / {\n        return 404;" in upload
+def test_setup_pins_the_ci_key_to_the_gate() -> None:
+    setup = (ROOT / "deploy/setup-host.sh").read_text()
+    assert 'restrict,command="%s/deploy/deploy-gate" %s' in setup
+    assert '"$ROOT" "$CI_PUBLIC_KEY"' in setup
+    assert 'sudo install -o root -g root -m 755 "$DEPLOY_DIR/deploy.sh" "$ROOT/deploy/deploy.sh"' in setup
+    assert 'sudo install -o root -g root -m 644 "$DEPLOY_DIR/compose.production.yml"' in setup

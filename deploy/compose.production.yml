@@ -1,7 +1,8 @@
 services:
   app:
     build:
-      context: ..
+      # The uploaded source; this file itself is the host's copy, never the release's.
+      context: ${GPX_RELEASE:?Set GPX_RELEASE to the release directory}
     image: gpx-route-generator:${DEPLOY_SHA:-local}
     ports:
       - "127.0.0.1:${GPX_PORT:-8001}:8000"

@@ -4,24 +4,32 @@
 
 Matches Task Automation's Lightsail pattern: GitHub-hosted runner, pinned SSH host keys, SHA-addressed release directories, server-local secrets, and atomic `current` symlink activation. Uses the same `lightsail-production` environment and `LIGHTSAIL_*` settings names; GitHub secrets are repository/environment scoped and are not automatically shared between repositories. Unlike Task Automation's cron processes, GPX runs a long-lived Docker service with FFmpeg and health checks.
 
-Existing `Quality` workflow tests Python, runs fatal Ruff checks, and builds Docker image on pushes and pull requests. `Deploy production` runs only after a successful `Quality` run for a push to this repository's `main`. It checks the tested SHA is still current, uploads that exact checkout over SSH, builds on the Linux host, and waits for a protected app to become healthy. Pull requests cannot trigger deployment. Deployment jobs serialize without cancellation so a running activation is not interrupted.
+Existing `Quality` workflow tests Python, runs fatal Ruff checks, and builds Docker image on pushes and pull requests. `Deploy production` runs only after a successful `Quality` run for a push to this repository's `main`. It checks the tested SHA is still current, uploads that exact checkout over SSH to the host's deploy gate, builds on the Linux host, and waits for a protected app to become healthy.
+
+The CI key is pinned to `/opt/gpx-route-generator/deploy/deploy-gate` with `restrict,command=` in `authorized_keys`: it can only run `upload <sha>` (unpack a `git archive` into `releases/<sha>`) or `activate <sha>`. Activation runs the host's own root-owned copies of `deploy.sh` and `compose.production.yml`; the uploaded release is only the Docker build context, so nothing in a release decides how the container runs or touches nginx. Change those files here, then re-run `setup-host.sh` on the host to install them. Pull requests cannot trigger deployment. Deployment jobs serialize without cancellation so a running activation is not interrupted.
 
 No server credentials, application secrets, or Cloudflare credentials belong in source control. SSH host keys are pinned; do not replace this with runtime `ssh-keyscan` or disable host verification.
 
 ## One-time host setup
 
-Use a dedicated Linux deployment directory and account. Install Docker Engine, Docker Compose v2 with `up --wait`, Bash, `flock`, GNU coreutils, and tar. The deployment account needs Docker access; Docker-group membership is effectively root access. Restrict its SSH key and GitHub production environment accordingly. No inbound app port is required beyond your existing reverse proxy; SSH must be reachable from GitHub-hosted runners or use a separately approved private runner arrangement.
+Install Docker Engine, Docker Compose v2 with `up --wait`, Bash, `flock`, GNU coreutils, and tar. The admin account that runs the gate needs Docker access; Docker-group membership is effectively root access, which is why the CI key only reaches the gate. Then copy `deploy/` to the host and, as the admin user, run:
 
-Example directory layout (create with appropriate owner and mode, not world-writable):
+```bash
+bash setup-host.sh                                              # layout, scripts, compose file, .env, vhost
+CI_PUBLIC_KEY="ssh-ed25519 AAAA... comment" bash setup-host.sh  # also pin the CI key to the gate
+``` No inbound app port is required beyond your existing reverse proxy; SSH must be reachable from GitHub-hosted runners or use a separately approved private runner arrangement.
+
+Directory layout `setup-host.sh` creates:
 
 ```text
-/home/ubuntu/gpx-route-generator/
-  .env
-  releases/<commit-sha>/
+/opt/gpx-route-generator/
+  .env                       mode 600, admin user
+  deploy/                    root-owned: deploy-gate, deploy.sh, compose.production.yml
+  releases/<commit-sha>/     uploaded sources (Docker build contexts)
   current -> releases/<healthy-commit-sha>
 ```
 
-Create `/home/ubuntu/gpx-route-generator/.env` beside `releases/` and `current`, mode `600`, owned by deployment account. The shared Lightsail environment has this file at that exact path. Each deployed release receives a `.env` symlink to this root file before activation, matching Task Automation's layout without copying secrets into release source. Copy variable names from repository `.env.example`, then set real values locally on that host. Do not upload development `.env` from a laptop. Required names:
+`/opt/gpx-route-generator/.env` holds the production values; the host's compose file reads it directly, and secrets never enter a release. Copy variable names from repository `.env.example`, then set real values locally on that host. Do not upload development `.env` from a laptop. Required names:
 
 ```dotenv
 APP_ENV=production
@@ -47,14 +55,7 @@ Production Compose forces `APP_ENV=production` and disables unsafe bypass even w
 
 Configured environment variables: `LIGHTSAIL_HOST`, `LIGHTSAIL_USER`.
 
-Set environment variables if defaults do not fit:
-
-| Variable | Default |
-| --- | --- |
-| `SSH_PORT` | `22` |
-| `DEPLOY_ROOT` | `/home/ubuntu/gpx-route-generator` |
-
-Host names and paths are validated before being embedded in remote commands. Deployment roots must be absolute paths below `/home/<user>/`, containing only letters, digits, slash, underscore, and hyphen. Default root matches existing Lightsail apps: `/home/ubuntu/gpx-route-generator`. Current Lightsail host already has Docker Compose, root-level `.env`, SSH key, Nginx redirect vhost, and GPX TLS certificate provisioned. For a nonstandard SSH port, known_hosts must use `[hostname]:port` format. Never paste private keys into issue comments, chat, or source files.
+Set `SSH_PORT` if the default `22` does not fit. Host names, the user and the SHA are validated before being embedded in remote commands. Current Lightsail host already has Docker Compose, root-level `.env`, SSH key, Nginx redirect vhost, and GPX TLS certificate provisioned. For a nonstandard SSH port, known_hosts must use `[hostname]:port` format. Never paste private keys into issue comments, chat, or source files.
 
 Protect `main` with required `Tests and checks` and `Docker build` checks. This workflow gates deployment on successful CI even without branch protection, but does not prevent direct pushes. Add least-privilege repository settings separately; configuration here does not change remote policy.
 
@@ -86,18 +87,17 @@ Enable it after the DNS record and its Let's Encrypt certificate exist (the vhos
 
 1. Shared Lightsail host is provisioned; isolated deployment key, root `.env`, Docker and Compose are ready. Candidate image passed isolated app startup/config check.
 2. `lightsail-production` GitHub environment is restricted to `main`, with deployment secrets and variables configured.
-3. Merge deployment workflow to `main`; that merge triggers first production activation and installs GPX Nginx vhost.
+3. Run `setup-host.sh` (installs the gate, scripts, compose file and GPX Nginx vhost, and pins the CI key), then merge to `main`; that merge triggers the next production activation.
 4. Confirm GitHub workflows pass, container becomes healthy, and Waybill remains available.
 5. Check public GPX API and perform one real CAPTCHA-protected render. Do not expose config containing site key; Maps and reCAPTCHA secrets remain server-only.
 
 Read-only host checks:
 
 ```bash
-cd /home/ubuntu/gpx-route-generator/current
-DEPLOY_ROOT=/home/ubuntu/gpx-route-generator \
+DEPLOY_ROOT=/opt/gpx-route-generator GPX_RELEASE="$(readlink -f /opt/gpx-route-generator/current)" \
   docker compose --project-name gpx-route-generator \
-  --env-file /home/ubuntu/gpx-route-generator/.env \
-  -f /home/ubuntu/gpx-route-generator/current/deploy/compose.production.yml ps
+  --env-file /opt/gpx-route-generator/.env \
+  -f /opt/gpx-route-generator/deploy/compose.production.yml ps
 curl --fail --silent https://gpx-route-generator.minhtran.id.vn/api/config
 ```
 
@@ -107,9 +107,8 @@ Script builds before replacing app. A failed build leaves running release untouc
 
 Release directories and old Docker images are retained to support rollback. Monitor disk and remove old releases/images only after confirming they are not current or needed for rollback. Do not blindly run Docker prune on a shared host.
 
-Manual rollback requires approval because it restarts production. Run script from a retained healthy release with its full SHA:
+Manual rollback requires approval because it restarts production. Activate a retained healthy release by its full SHA:
 
 ```bash
-bash /home/ubuntu/gpx-route-generator/releases/<healthy-sha>/deploy/deploy.sh \
-  /home/ubuntu/gpx-route-generator <healthy-sha>
+/opt/gpx-route-generator/deploy/deploy-gate activate <healthy-sha>
 ```
