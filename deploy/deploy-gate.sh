@@ -28,6 +28,7 @@ upload)
     mkdir -p "$dir"
     tar -xzf - -C "$dir" --no-same-owner --no-same-permissions
     chmod -R a+rX "$dir"
+    touch "$dir" # its age for prune-releases.sh is the upload time
     printf 'Uploaded %s\n' "$RELEASE_ID"
     ;;
 activate)

@@ -1,6 +1,8 @@
 import io
+import os
 from pathlib import Path
 import subprocess
+import time
 import urllib.request
 
 import pytest
@@ -157,3 +159,46 @@ def test_setup_pins_the_ci_key_to_the_gate() -> None:
     assert '"$ROOT" "$CI_PUBLIC_KEY"' in setup
     assert 'sudo install -o root -g root -m 755 "$DEPLOY_DIR/deploy.sh" "$ROOT/deploy/deploy.sh"' in setup
     assert 'sudo install -o root -g root -m 644 "$DEPLOY_DIR/compose.production.yml"' in setup
+
+
+def _release(base: Path, name: str, age_days: float) -> None:
+    folder = base / name
+    folder.mkdir()
+    stamp = time.time() - age_days * 86400
+    os.utime(folder, (stamp, stamp))
+
+
+def _prune(releases: Path, active: str) -> list[str]:
+    result = subprocess.run(
+        ["bash", str(ROOT / "deploy/prune-releases.sh"), str(releases), str(releases / active)],
+        capture_output=True, text=True, check=True,
+    )
+    return sorted(Path(line).name for line in result.stdout.split())
+
+
+@pytest.mark.parametrize("ages,active,kept", [
+    # 5 newest kept, the older ones go, except the active release.
+    ({"r1": 0.04, "r2": 0.08, "r3": 0.12, "r4": 3, "r5": 6, "r6": 8, "r7": 10, "r8": 12, "r9": 20}, "r8",
+     ["r1", "r2", "r3", "r4", "r5", "r8"]),
+    # More than 5 in the last 7 days: all of those stay.
+    ({"r1": 0.04, "r2": 0.08, "r3": 0.12, "r4": 0.2, "r5": 0.3, "r6": 1, "r7": 6.5, "r8": 30}, "r1",
+     ["r1", "r2", "r3", "r4", "r5", "r6", "r7"]),
+    # 5 or fewer: kept however old.
+    ({"r1": 10, "r2": 20, "r3": 30}, "r1", ["r1", "r2", "r3"]),
+])
+def test_prune_keeps_five_newest_plus_the_last_week_and_the_active_release(tmp_path, ages, active, kept) -> None:
+    releases = tmp_path / "releases"
+    releases.mkdir()
+    for name, age in ages.items():
+        _release(releases, name, age)
+    removed = _prune(releases, active)
+    assert sorted(p.name for p in releases.iterdir()) == kept
+    assert removed == sorted(set(ages) - set(kept))
+
+
+def test_deploy_prunes_after_activation_and_only_drops_images_without_a_release() -> None:
+    script = (ROOT / "deploy/deploy.sh").read_text()
+    assert 'bash "$root/deploy/prune-releases.sh" "$root/releases" "$release"' in script
+    assert script.index('mv -Tf "$root/current.next" "$root/current"\nprintf') < script.index("prune-releases.sh")
+    assert '[[ ! -d "$root/releases/$tag" ]] && docker image rm "gpx-route-generator:$tag"' in script
+    assert "docker image prune" not in script and "docker system prune" not in script

@@ -105,7 +105,7 @@ curl --fail --silent https://gpx-route-generator.minhtran.id.vn/api/config
 
 Script builds before replacing app. A failed build leaves running release untouched. A failed health check attempts to restart previous healthy release without rebuilding, then fails CI. On first deployment with no previous release, failed activation stops GPX container and leaves Waybill and other apps untouched. First deployment has no previous release to restore. `current` changes only after health check succeeds. Deployments restart process; queued/running jobs are in memory and are not preserved across restarts. Plan deploys when no renders are active. Render files remain in named `gpx-route-generator-data` volume; never run `docker compose down --volumes` as rollback.
 
-Release directories and old Docker images are retained to support rollback. Monitor disk and remove old releases/images only after confirming they are not current or needed for rollback. Do not blindly run Docker prune on a shared host.
+After each successful activation, `prune-releases.sh` keeps the 5 newest release directories plus any from the last 7 days (never the active one), and `deploy.sh` removes each `gpx-route-generator:<sha>` image whose release directory is gone. Nothing else is pruned: do not run Docker prune on a shared host.
 
 Manual rollback requires approval because it restarts production. Activate a retained healthy release by its full SHA:
 
