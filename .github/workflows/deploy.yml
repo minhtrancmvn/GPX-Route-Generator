@@ -28,7 +28,9 @@ jobs:
       SSH_HOST: ${{ vars.LIGHTSAIL_HOST }}
       SSH_USER: ${{ vars.LIGHTSAIL_USER }}
       SSH_PORT: ${{ vars.SSH_PORT || '22' }}
-      DEPLOY_ROOT: ${{ vars.DEPLOY_ROOT || '/home/ubuntu/gpx-route-generator' }}
+      # The CI key is pinned to this root-owned gate on the host (restrict,command=): it can only
+      # upload a release or activate one with the host's own deploy.sh and compose file.
+      DEPLOY_GATE: /opt/gpx-route-generator/deploy/deploy-gate
     steps:
       - name: Check tested revision is still main
         id: revision
@@ -62,7 +64,6 @@ jobs:
           [[ "$SSH_HOST" =~ ^[a-zA-Z0-9][a-zA-Z0-9.-]*$ ]]
           [[ "$SSH_USER" =~ ^[a-zA-Z_][a-zA-Z0-9_-]*$ ]]
           [[ "$SSH_PORT" =~ ^[0-9]+$ ]]
-          [[ "$DEPLOY_ROOT" =~ ^/home/[a-zA-Z0-9_-]+/[a-zA-Z0-9/_-]+$ ]]
           [[ "$DEPLOY_SHA" =~ ^[a-f0-9]{40}$ ]]
           install -m 700 -d "$RUNNER_TEMP/gpx-ssh"
           printf '%s\n' "$SSH_PRIVATE_KEY" > "$RUNNER_TEMP/gpx-ssh/key"
@@ -75,17 +76,14 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          ssh_options=(-i "$RUNNER_TEMP/gpx-ssh/key" -p "$SSH_PORT"
+          ssh_options=(-i "$RUNNER_TEMP/gpx-ssh/key" -p "$SSH_PORT" -o IdentitiesOnly=yes
             -o BatchMode=yes -o ConnectTimeout=15 -o StrictHostKeyChecking=yes
             -o UserKnownHostsFile="$RUNNER_TEMP/gpx-ssh/known_hosts")
           remote="$SSH_USER@$SSH_HOST"
-          release="$DEPLOY_ROOT/releases/$DEPLOY_SHA"
-          # Client-side expansion is intentional; paths are validated above.
+          git archive --format=tar.gz --output="$RUNNER_TEMP/gpx-release.tar.gz" "$DEPLOY_SHA"
+          # Client-side expansion is intentional; the SHA is validated above.
           # shellcheck disable=SC2029
-          ssh "${ssh_options[@]}" "$remote" "mkdir -p '$release'"
-          git archive --format=tar --output="$RUNNER_TEMP/gpx-release.tar" "$DEPLOY_SHA"
-          # shellcheck disable=SC2029
-          ssh "${ssh_options[@]}" "$remote" "tar -xf - -C '$release'" < "$RUNNER_TEMP/gpx-release.tar"
+          ssh "${ssh_options[@]}" "$remote" "$DEPLOY_GATE upload $DEPLOY_SHA" < "$RUNNER_TEMP/gpx-release.tar.gz"
           main_sha=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq '.object.sha')
           if [[ "$main_sha" != "$DEPLOY_SHA" ]]; then
             printf 'Skipping superseded release before activation\n'
@@ -93,8 +91,8 @@ jobs:
           fi
           # Recheck on host after lock acquisition to close concurrent-push window.
           # shellcheck disable=SC2029
-          ssh "${ssh_options[@]}" "$remote" "bash '$release/deploy/deploy.sh' '$DEPLOY_ROOT' '$DEPLOY_SHA'"
+          ssh "${ssh_options[@]}" "$remote" "$DEPLOY_GATE activate $DEPLOY_SHA"
 
       - name: Remove SSH credentials
         if: always()
-        run: rm -rf "$RUNNER_TEMP/gpx-ssh" "$RUNNER_TEMP/gpx-release.tar"
+        run: rm -rf "$RUNNER_TEMP/gpx-ssh" "$RUNNER_TEMP/gpx-release.tar.gz"
