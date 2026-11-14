@@ -29,6 +29,7 @@ sudo install -d -o "$ADMIN" -g "$ADMIN" -m 755 "$ROOT" "$ROOT/releases"
 sudo install -d -o root -g root -m 755 "$ROOT/deploy"
 sudo install -o root -g root -m 755 "$DEPLOY_DIR/deploy-gate.sh" "$ROOT/deploy/deploy-gate"
 sudo install -o root -g root -m 755 "$DEPLOY_DIR/deploy.sh" "$ROOT/deploy/deploy.sh"
+sudo install -o root -g root -m 755 "$DEPLOY_DIR/prune-releases.sh" "$ROOT/deploy/prune-releases.sh"
 sudo install -o root -g root -m 644 "$DEPLOY_DIR/compose.production.yml" "$ROOT/deploy/compose.production.yml"
 
 if [[ ! -f "$ROOT/.env" && -f "$OLD_ROOT/.env" ]]; then

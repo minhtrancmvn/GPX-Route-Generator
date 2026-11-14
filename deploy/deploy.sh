@@ -48,3 +48,13 @@ fi
 ln -sfn "$release" "$root/current.next"
 mv -Tf "$root/current.next" "$root/current"
 printf 'Deployed %s\n' "$sha"
+
+# Keep the 5 newest releases, plus everything from the last 7 days; never the active one. Then drop
+# each app image whose release folder is gone (one in use by a container can't be removed anyway).
+bash "$root/deploy/prune-releases.sh" "$root/releases" "$release" | sed 's:^:Removed old release :' ||
+    printf 'Old release cleanup failed (the new release is live)\n' >&2
+docker image ls gpx-route-generator --format '{{.Tag}}' | grep -E '^[0-9a-f]{40}$' | while IFS= read -r tag; do
+    if [[ ! -d "$root/releases/$tag" ]] && docker image rm "gpx-route-generator:$tag" >/dev/null 2>&1; then
+        printf 'Removed old image %s\n' "$tag"
+    fi
+done || true
